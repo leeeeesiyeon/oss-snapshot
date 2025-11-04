@@ -1,0 +1,8 @@
+# Python (Backend)
+# -------------------
+/backend/.venv/
+
+/backend/pose_model.pkl
+
+/backend/__pycache__/
+*.pyc
