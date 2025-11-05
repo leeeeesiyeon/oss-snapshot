@@ -1,0 +1,23 @@
+@tailwind base;
+    @tailwind components;
+    @tailwind utilities;
+
+    body {
+      @apply bg-zinc-900 text-white font-jua; 
+      overflow: hidden; 
+    }
+
+    @keyframes print-animation {
+      from {
+        transform: translateY(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+    
+    .print-effect {
+      animation: print-animation 1.5s ease-out forwards;
+    }

@@ -4,7 +4,7 @@ import SelectModePage from './pages/SelectModePage';
 import TakePicturePage from './pages/TakePicturePage';
 import PrintPage from './pages/PrintPage';
 import TrainAiPage from './pages/TrainAiPage'; // AI 학습 페이지 임포트
-import './App.css'; // 디자인 스타일
+import './styles/App.css'; // 디자인 스타일
 
 export default function App() {
   // 페이지 관리
