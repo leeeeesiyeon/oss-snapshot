@@ -1,91 +1,33 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import './styles/App.css';
+
+// 페이지 컴포넌트 임포트
 import HomePage from './pages/HomePage';
 import SelectModePage from './pages/SelectModePage';
-import TakePicturePage from './pages/TakePicturePage';
+import NormalModePage from './pages/NormalModePage';
+import AiModePage from './pages/AiModePage';
+import SelectPictureModePage from './pages/SelectPictureModePage';
+import SelectFramePage from './pages/SelectFramePage';
 import PrintPage from './pages/PrintPage';
-import TrainAiPage from './pages/TrainAiPage'; // AI 학습 페이지 임포트
-import './styles/App.css'; // 디자인 스타일
+import TrainAiPage from './pages/TrainAiPage';
 
 export default function App() {
-  // 페이지 관리
-  const [page, setPage] = useState('home'); // 'home', 'select', 'take', 'print', 'train'
-  const [mode, setMode] = useState('normal'); // 선택된 모드
-  const [photos, setPhotos] = useState([]); // 촬영된 4컷
-
-  // -------------------------------
-  // 페이지 렌더링 (useCallback으로 핸들러 최적화)
-  // -------------------------------
-
-  const handleStart = useCallback(() => {
-    setPage('select');
-  }, []);
-
-  const handleSelectMode = useCallback((selectedMode) => {
-    setMode(selectedMode);
-    setPhotos([]); // 사진 초기화
-    setPage('take');
-  }, []);
-
-  const handleComplete = useCallback((capturedPhotos) => {
-    if (Array.isArray(capturedPhotos)) {
-      setPhotos(capturedPhotos);
-      setPage('print');
-    } else {
-      console.error('onComplete: 배열 아님', capturedPhotos);
-    }
-  }, []);
-
-  const handleRestart = useCallback(() => {
-    setPhotos([]);
-    setMode('normal');
-    setPage('home');
-  }, []);
-  
-  // 'train' 페이지 이동용 핸들러
-  const handleGoToTrain = useCallback(() => {
-    setPage('train');
-  }, []);
-  
-  const goHome = useCallback(() => {
-    setPage('home');
-  }, []);
-
-
-  if (page === 'home') {
-    return <HomePage onStart={handleStart} onGoToTrain={handleGoToTrain} />;
-  }
-
-  if (page === 'select') {
-    return (
-      <SelectModePage
-        onSelect={handleSelectMode}
-      />
-    );
-  }
-
-  if (page === 'take') {
-    return (
-      <TakePicturePage
-        mode={mode}
-        onComplete={handleComplete}
-      />
-    );
-  }
-
-  if (page === 'print') {
-    return (
-      <PrintPage
-        photos={photos}
-        onRestart={handleRestart}
-      />
-    );
-  }
-  
-  // 'train' 페이지 렌더링
-  if (page === 'train') {
-    return <TrainAiPage onBackToHome={goHome} />;
-  }
-
-  return <div>⚠️ 페이지 오류</div>;
+  return (
+    <Router>
+      <div className="App">
+        <Routes>
+          {/* 각 페이지에 대한 라우트 정의 */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/select-mode" element={<SelectModePage />} />
+          <Route path="/normal-mode" element={<NormalModePage />} />
+          <Route path="/ai-mode" element={<AiModePage />} />
+          <Route path="/select-picture" element={<SelectPictureModePage />} />
+          <Route path="/select-frame" element={<SelectFramePage />} />
+          <Route path="/print" element={<PrintPage />} />
+          <Route path="/train" element={<TrainAiPage />} />
+        </Routes>
+      </div>
+    </Router>
+  );
 }
-

@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-webgl';
+import logoWhite from '../assets/images/logo_white.png';
 import '@tensorflow/tfjs-backend-cpu';
 import * as poseDetection from '@tensorflow-models/pose-detection';
 import axios from 'axios';
@@ -20,7 +22,8 @@ const classifier = knnClassifier.create();
 // 학습 가능한 포즈 목록 (고정)
 const AVAILABLE_POSES = ["차렷!", "브이", "꽃받침", "볼하트", "배경"];
 
-export default function TrainAiPage({ onBackToHome }) {
+export default function TrainAiPage() {
+  const navigate = useNavigate();
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
   const [detector, setDetector] = useState(null);
@@ -106,7 +109,7 @@ export default function TrainAiPage({ onBackToHome }) {
     return () => clearInterval(interval);
   }, [detector]);
 
-  // 5. "이 포즈 50번 학습" 버튼 핸들러 (⭐️ 수정됨)
+  // 5. "이 포즈 50번 학습" 버튼 핸들러
   const handleLearnPose = async () => {
     if (!detector || !webcamRef.current || !poseName) {
       alert("AI가 로드되지 않았거나 포즈 이름이 비었습니다.");
@@ -128,7 +131,7 @@ export default function TrainAiPage({ onBackToHome }) {
         // 2. 17개 관절 좌표를 1차원 배열(34개 숫자)로 변환
         const features = poses[0].keypoints.flatMap(kp => [kp.x, kp.y]);
 
-        // 3. ⭐️ 백엔드 API 1번(/api/train) 호출
+        // 3. 백엔드 API 1번(/api/train) 호출
         try {
           const response = await axios.post(`${API_URL}/api/train`, {
             label: poseName,
@@ -166,7 +169,7 @@ export default function TrainAiPage({ onBackToHome }) {
   const handleTrainModel = async () => {
     setStatusText("AI 뇌(Python)가 학습을 시작합니다... (몇 초 걸림)");
     try {
-      // ⭐️ 백엔드 API 2번(/api/train-model) 호출
+      // 백엔드 API 2번(/api/train-model) 호출
       const response = await axios.post(`${API_URL}/api/train-model`);
       setStatusText(response.data.message); // "모델 학습 완료!"
       alert("AI 뇌(모델)가 성공적으로 학습되었습니다!");
@@ -177,7 +180,7 @@ export default function TrainAiPage({ onBackToHome }) {
   };
 
   return (
-    // ⭐️ NEW: flexWrap: "wrap" 추가 (화면이 좁으면 줄바꿈)
+    // NEW: flexWrap: "wrap" 추가 (화면이 좁으면 줄바꿈)
     <div style={{ display: "flex", gap: "40px", justifyContent: "center", padding: "20px", flexWrap: "wrap" }}>
       
       {/* 왼쪽: AI 학습 화면 */}
@@ -213,7 +216,7 @@ export default function TrainAiPage({ onBackToHome }) {
           />
         </div>
         
-        <button onClick={onBackToHome} style={{ width: videoWidth, marginTop: "20px", backgroundColor: "#555", color: "white", borderRadius: "5px", padding: "10px" }}>
+        <button onClick={() => navigate('/')} style={{ width: videoWidth, marginTop: "20px", backgroundColor: "#555", color: "#f5f5f5", borderRadius: "5px", padding: "10px" }}>
           홈으로 돌아가기
         </button>
       </div>
@@ -231,7 +234,7 @@ export default function TrainAiPage({ onBackToHome }) {
                   width: '100%',
                   padding: "12px 24px",
                   fontSize: "1.1rem",
-                  color: poseName === pose ? "white" : "#333",
+                  color: poseName === pose ? "#f5f5f5" : "#333",
                   backgroundColor: poseName === pose ? "#007AFF" : "#e0e0e0",
                   border: poseName === pose ? "2px solid #007AFF" : "2px solid #ccc",
                   borderRadius: "10px",
@@ -247,7 +250,7 @@ export default function TrainAiPage({ onBackToHome }) {
           
           <button 
             onClick={handleLearnPose}
-            style={{ width: '100%', padding: "12px 24px", fontSize: "1.1rem", color: "white", backgroundColor: "#007AFF", border: "none", borderRadius: "10px", cursor: 'pointer', marginTop: '20px' }}
+            style={{ width: '100%', padding: "12px 24px", fontSize: "1.1rem", color: "#f5f5f5", backgroundColor: "#007AFF", border: "none", borderRadius: "10px", cursor: 'pointer', marginTop: '20px' }}
           >
             " {poseName} " 포즈 50번 학습
           </button>
@@ -255,7 +258,7 @@ export default function TrainAiPage({ onBackToHome }) {
           <h3 style={{marginTop: '30px'}}>2. (필수) 모델 학습시키기</h3>
           <button 
             onClick={handleTrainModel}
-            style={{ width: '100%', padding: "12px 24px", fontSize: "1.1rem", color: "white", backgroundColor: "#34C759", border: "none", borderRadius: "10px", cursor: 'pointer' }}
+            style={{ width: '100%', padding: "12px 24px", fontSize: "1.1rem", color: "#f5f5f5", backgroundColor: "#34C759", border: "none", borderRadius: "10px", cursor: 'pointer' }}
           >
             AI 뇌(Python) 학습 시작!
           </button>
@@ -270,6 +273,34 @@ export default function TrainAiPage({ onBackToHome }) {
                     </li>
                 ))}
             </ul>
+        </div>
+      </div>
+
+      {/* 저작권 문구 */}
+      <div
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          textAlign: 'center',
+          color: 'rgba(245, 245, 245, 0.8)',
+          fontSize: '0.9rem',
+          zIndex: 1000
+        }}
+      >
+        <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <img 
+            src={logoWhite} 
+            alt="Snapshot" 
+            style={{ 
+              height: '1.1rem',
+              width: 'auto'
+            }} 
+          />
+        </div>
+        <div style={{ fontSize: '0.8rem' }}>
+          © 2025 | All rights reserved
         </div>
       </div>
     </div>

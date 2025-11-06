@@ -10,7 +10,7 @@ const videoConstraints = {
 };
 
 // -------------------------------
-// 📸 사진 촬영 / 업로드 페이지 (수정 완료본)
+// 사진 촬영 / 업로드 페이지 (수정 완료본)
 // -------------------------------
 export default function TakePicturePage({ mode, onComplete }) {
   const webcamRef = useRef(null);
@@ -56,7 +56,7 @@ export default function TakePicturePage({ mode, onComplete }) {
   }, [aiTargetIndex]);
 
   // ---------------------------------
-  // 📸 일반 모드 로직 (기존 takeShot)
+  // 일반 모드 로직 (기존 takeShot)
   // ---------------------------------
   const takeShot = useCallback(() => {
     const currentPhotoCount = capturedPhotosRef.current.length;
@@ -368,7 +368,7 @@ export default function TakePicturePage({ mode, onComplete }) {
   // 렌더링
   // ---------------------------------
 
-  // 1️⃣ 일반 모드
+  // 1. 일반 모드
   if (mode === 'normal') {
     // 촬영 완료 상태인지 확인
     const isCompleted = currentPhotoNumber > 4 || capturedPhotos.length === 4;
@@ -418,7 +418,7 @@ export default function TakePicturePage({ mode, onComplete }) {
             >
               <h2
                 className="countdown-text"
-                style={{ fontSize: '4rem', color: 'white' }}
+                style={{ fontSize: '4rem', color: '#f5f5f5' }}
               >
                 {countdown}
               </h2>
@@ -444,7 +444,7 @@ export default function TakePicturePage({ mode, onComplete }) {
                 className="webcam-status"
                 style={{
                   fontSize: '2rem',
-                  color: 'white',
+                  color: '#f5f5f5',
                   textShadow: '0 0 10px black',
                 }}
               >
@@ -473,7 +473,7 @@ export default function TakePicturePage({ mode, onComplete }) {
                 className="webcam-status"
                 style={{
                   fontSize: '2rem',
-                  color: 'white',
+                  color: '#f5f5f5',
                   textShadow: '0 0 10px black',
                 }}
               >
@@ -486,7 +486,7 @@ export default function TakePicturePage({ mode, onComplete }) {
     );
   }
 
-  // 2️⃣ AI 모드
+  // 2. AI 모드
   if (mode === 'ai') {
     const isCompleted = aiTargetIndex >= AI_POSES.length || capturedPhotos.length === 4;
     const nextTarget = AI_POSES[Math.min(aiTargetIndex, AI_POSES.length - 1)];
@@ -536,7 +536,7 @@ export default function TakePicturePage({ mode, onComplete }) {
             >
               <h2
                 className="countdown-text"
-                style={{ fontSize: '4rem', color: 'white' }}
+                style={{ fontSize: '4rem', color: '#f5f5f5' }}
               >
                 {countdown}
               </h2>
@@ -562,7 +562,7 @@ export default function TakePicturePage({ mode, onComplete }) {
                 className="webcam-status"
                 style={{
                   fontSize: '2rem',
-                  color: 'white',
+                  color: '#f5f5f5',
                   textShadow: '0 0 10px black',
                 }}
               >
@@ -591,7 +591,7 @@ export default function TakePicturePage({ mode, onComplete }) {
                 className="webcam-status"
                 style={{
                   fontSize: '2rem',
-                  color: 'white',
+                  color: '#f5f5f5',
                   textShadow: '0 0 10px black',
                 }}
               >
@@ -604,7 +604,7 @@ export default function TakePicturePage({ mode, onComplete }) {
     );
   }
 
-  // 3️⃣ 업로드 모드
+  // 3. 업로드 모드
   if (mode === 'upload') {
     return (
       <div className="take-picture-page" style={{ textAlign: 'center' }}>
@@ -619,10 +619,10 @@ export default function TakePicturePage({ mode, onComplete }) {
     );
   }
 
-  // ❌ mode가 잘못된 경우
+  // mode가 잘못된 경우
   return (
     <div className="take-picture-page" style={{ textAlign: 'center' }}>
-      <h2>⚠️ 모드 오류: 올바른 모드가 전달되지 않았습니다.</h2>
+      <h2>Mode error: Invalid mode was passed.</h2>
     </div>
   );
 }
