@@ -62,27 +62,35 @@ def train_model():
     if not pose_data_db:
         raise HTTPException(status_code=400, detail="학습할 데이터가 없습니다.")
 
-    X_train = [] # 모든 좌표 데이터
-    y_train = [] # 모든 이름표(라벨)
+    X_train = []
+    y_train = []
     
     for label, features_list in pose_data_db.items():
         for features in features_list:
             X_train.append(features)
             y_train.append(label)
             
-    if len(X_train) < 3: # 최소 3개는 있어야 학습 가능 (n_neighbors=3)
+    if len(X_train) < 3:
         raise HTTPException(status_code=400, detail=f"데이터가 너무 적습니다. 최소 3개 이상 필요합니다. (현재 {len(X_train)}개)")
 
-    # 4. AI 뇌(classifier) 학습 시작!
+    # ✅ [추가] numpy 배열로 변환
+    X_train = np.array(X_train)
+
+    # ✅ [추가] (0,1) 범위로 정규화 — 좌표를 화면 크기와 무관하게 안정화
+    max_val = np.max(X_train)
+    if max_val != 0:  # 0으로 나누는 문제 방지
+        X_train = X_train / max_val
+
+    # ✅ KNN 학습
     classifier.fit(X_train, y_train)
-    
-    # 5. 학습된 AI 뇌를 파일(.pkl)로 저장
+
+    # ✅ 저장
     joblib.dump(classifier, MODEL_FILE_NAME)
     
-    print(f"모델 학습 완료! {len(X_train)}개의 데이터로 학습. -> {MODEL_FILE_NAME} 저장됨")
-    return {"message": f"모델 학습 완료! (총 {len(X_train)}개 데이터)"}
+    print(f"모델 학습 완료! {len(X_train)}개의 데이터로 학습. (정규화 적용됨) -> {MODEL_FILE_NAME} 저장됨")
+    return {"message": f"모델 학습 완료! (총 {len(X_train)}개 데이터, 정규화 적용됨)"}
 
-# --- API 3: "포즈 예측" (챌린지용) ---
+# --- API 3: "포즈 예측" ---
 @app.post("/api/predict")
 def predict_pose(data: PredictData):
     """React에서 보낸 '현재 좌표'를 보고, '무슨 포즈'인지 예측"""
@@ -123,6 +131,37 @@ def get_pose_counts():
             counts[pose] = 0
     return counts
 
+# --- API 5: "특정 포즈 데이터 삭제" ---
+@app.delete("/api/pose/{pose_name}")
+def delete_pose(pose_name: str):
+    """특정 포즈의 학습 데이터를 모두 삭제"""
+    if pose_name not in pose_data_db:
+        raise HTTPException(status_code=404, detail=f"'{pose_name}' 포즈 데이터가 없습니다.")
+    
+    deleted_count = len(pose_data_db[pose_name])
+    del pose_data_db[pose_name]
+    
+    # 모델 파일도 삭제 (데이터가 변경되었으므로 재학습 필요)
+    if os.path.exists(MODEL_FILE_NAME):
+        os.remove(MODEL_FILE_NAME)
+    
+    print(f"'{pose_name}' 포즈 데이터 {deleted_count}개 삭제 완료")
+    return {"message": f"'{pose_name}' 포즈 데이터 {deleted_count}개 삭제 완료. 모델을 재학습해주세요."}
+
+# --- API 6: "전체 데이터 삭제" ---
+@app.delete("/api/reset-all")
+def reset_all_data():
+    """모든 학습 데이터와 모델 삭제"""
+    total_count = sum(len(data) for data in pose_data_db.values())
+    pose_data_db.clear()
+    
+    # 모델 파일도 삭제
+    if os.path.exists(MODEL_FILE_NAME):
+        os.remove(MODEL_FILE_NAME)
+    
+    print(f"전체 데이터 {total_count}개 삭제 완료")
+    return {"message": f"전체 데이터 {total_count}개 삭제 완료."}
+
 # 상단에 상수 추가
-AVAILABLE_POSES = ["차렷!", "브이", "꽃받침", "볼하트", "배경"]
+AVAILABLE_POSES = ["Wink", "V sign", "Close up", "Surprise", "배경"]
 

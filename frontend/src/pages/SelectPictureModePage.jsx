@@ -447,6 +447,39 @@ export default function SelectPictureModePage() {
         <div style={{ fontSize: '0.8rem' }}>
           © 2025 | All rights reserved
         </div>
+        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
+          <a 
+            href="#" 
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/');
+            }}
+            style={{ 
+              color: 'rgba(245, 245, 245, 0.8)', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+          >
+            HOME
+          </a>
+          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
+          <a 
+            href="https://github.com/leeeeesiyeon/oss-snapshot" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              color: 'rgba(245, 245, 245, 0.8)', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+          >
+            GitHub
+          </a>
+        </div>
       </div>
     </div>
   );

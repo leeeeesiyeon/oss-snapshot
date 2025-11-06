@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
-import * as poseDetection from '@tensorflow-models/pose-detection';
-import '@tensorflow/tfjs-backend-webgl';
+import * as Human from '@vladmandic/human';
 import logoWhite from '../assets/images/logo_white.png';
 import cameraBox from '../assets/images/takepicture_camera_box.svg';
 
@@ -14,7 +13,7 @@ const videoConstraints = {
 
 const AI_REQUIRED_STABLE = 5;
 const AI_CONF_THRESHOLD = 0.7;
-const AI_POSES = ["차렷!", "브이", "꽃받침", "볼하트"];
+const AI_POSES = ["Wink", "V sign", "Close up", "Surprise"];
 
 // AI 모드 페이지
 export default function AiModePage() {
@@ -51,11 +50,18 @@ export default function AiModePage() {
 
     const createDetector = async () => {
       try {
-        const detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
-          modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
+        const human = new Human.Human({
+          modelBasePath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
+          backend: 'webgl',
+          modelPath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
+          face: { enabled: false },
+          hand: { enabled: false },
+          object: { enabled: false },
+          segmentation: { enabled: false },
+          body: { enabled: true },
         });
-        detectorRef.current = detector;
-        console.log('AI detector 생성됨');
+        await human.warmup();
+        detectorRef.current = human;
       } catch (e) {
         console.error('detector 생성 실패', e);
       }
@@ -73,10 +79,12 @@ export default function AiModePage() {
       }
 
       try {
-        const poses = await detectorRef.current.estimatePoses(video);
-        if (poses && poses.length > 0) {
-          const keypoints = poses[0].keypoints;
+        const result = await detectorRef.current.detect(video);
+        if (result.body && result.body.length > 0) {
+          const pose = result.body[0];
+          const keypoints = pose.keypoints || [];
           const features = [];
+          // Human.js는 17개 keypoints를 사용 (MoveNet과 동일한 구조)
           for (let kp of keypoints) {
             features.push((kp.x ?? 0) / videoConstraints.width);
             features.push((kp.y ?? 0) / videoConstraints.height);
@@ -102,7 +110,6 @@ export default function AiModePage() {
             }
 
             if (poseStableCountRef.current >= AI_REQUIRED_STABLE && !isShootingRef.current) {
-              console.log('AI가 포즈 안정적이라 판단하여 촬영 시작');
               poseStableCountRef.current = 0;
               setIsShooting(true);
               isShootingRef.current = true;
@@ -148,7 +155,6 @@ export default function AiModePage() {
             }
           } else {
             const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }));
-            console.error('predict API 실패', res.status, errorData);
             setStatusText(`Error: ${errorData.detail || 'Server connection failed'}\nPlease check if the backend is running`);
           }
         }
@@ -409,6 +415,39 @@ export default function AiModePage() {
         </div>
         <div style={{ fontSize: '0.8rem' }}>
           © 2025 | All rights reserved
+        </div>
+        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
+          <a 
+            href="#" 
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/');
+            }}
+            style={{ 
+              color: 'rgba(245, 245, 245, 0.8)', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+          >
+            HOME
+          </a>
+          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
+          <a 
+            href="https://github.com/leeeeesiyeon/oss-snapshot" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              color: 'rgba(245, 245, 245, 0.8)', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+          >
+            GitHub
+          </a>
         </div>
       </div>
     </div>

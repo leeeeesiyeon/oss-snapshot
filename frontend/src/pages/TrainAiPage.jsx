@@ -1,26 +1,16 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
-import * as tf from '@tensorflow/tfjs';
-import '@tensorflow/tfjs-backend-webgl';
+import * as Human from '@vladmandic/human';
 import logoWhite from '../assets/images/logo_white.png';
-import '@tensorflow/tfjs-backend-cpu';
-import * as poseDetection from '@tensorflow-models/pose-detection';
 import axios from 'axios';
-import * as knnClassifier from '@tensorflow-models/knn-classifier';
-
 
 const API_URL = "http://127.0.0.1:8000";
 const videoWidth = 640;
 const videoHeight = 480;
 const videoConstraints = { width: videoWidth, height: videoHeight, facingMode: "user" };
-const model = poseDetection.SupportedModels.MoveNet;
 
-// 2. KNN 분류기(AI 학습기) 생성
-const classifier = knnClassifier.create();
-
-// 학습 가능한 포즈 목록 (고정)
-const AVAILABLE_POSES = ["차렷!", "브이", "꽃받침", "볼하트", "배경"];
+const AVAILABLE_POSES = ["Wink", "V sign", "Close up", "Surprise", "배경"];
 
 export default function TrainAiPage() {
   const navigate = useNavigate();
@@ -28,43 +18,40 @@ export default function TrainAiPage() {
   const canvasRef = useRef(null);
   const [detector, setDetector] = useState(null);
   const [statusText, setStatusText] = useState("AI 모델 로딩 중...");
-
-  // 3. 학습시킬 포즈 이름 상태
   const [poseName, setPoseName] = useState("브이");
-  
-  // 4. 학습된 포즈 목록 (백엔드에서 알려준 횟수)
-  const [poseCounts, setPoseCounts] = useState({}); // { '브이': 100, '볼하트': 100 }
-
-  // AI 모델 로드
+  const [poseCounts, setPoseCounts] = useState({});
   useEffect(() => {
     const load = async () => {
       try {
-        // 백엔드 강제 설정 (webgl 우선, 실패 시 cpu)
-        try {
-          if (tf.getBackend() !== 'webgl') {
-            await tf.setBackend('webgl');
-          }
-        } catch (_) {
-          await tf.setBackend('cpu');
-        }
-
-        await tf.ready();
-
-        const d = await poseDetection.createDetector(model, {
-          modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+        const human = new Human.Human({
+          modelBasePath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
+          backend: 'webgl',
+          modelPath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
+          face: { enabled: false },
+          hand: { enabled: false },
+          object: { enabled: false },
+          segmentation: { enabled: false },
+          body: { enabled: true },
         });
-        setDetector(d);
+        await human.warmup();
+        setDetector(human);
         setStatusText("AI 준비 완료!");
       } catch (err) {
         console.error('detector 생성 실패', err);
-        // 최후의 수단: cpu로 다시 시도
+        // CPU로 다시 시도
         try {
-          await tf.setBackend('cpu');
-          await tf.ready();
-          const d = await poseDetection.createDetector(model, {
-            modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+          const human = new Human.Human({
+            modelBasePath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
+            backend: 'cpu',
+            modelPath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
+            face: { enabled: false },
+            hand: { enabled: false },
+            object: { enabled: false },
+            segmentation: { enabled: false },
+            body: { enabled: true },
           });
-          setDetector(d);
+          await human.warmup();
+          setDetector(human);
           setStatusText("AI 준비 완료!(CPU)");
         } catch (err2) {
           console.error('CPU 백엔드에서도 생성 실패', err2);
@@ -74,42 +61,137 @@ export default function TrainAiPage() {
     };
     load();
   }, []);
-  
-  // 관절 그리기
-  const drawKeypoints = (poses) => {
+
+  const drawKeypoints = (result) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     canvas.width = videoWidth;
     canvas.height = videoHeight;
-    ctx.scale(-1, 1);
-    ctx.translate(-videoWidth, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (poses.length > 0) {
-      for (const p of poses[0].keypoints) {
-        if (p.score > 0.3) {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
-          ctx.fillStyle = "lime";
-          ctx.fill();
+    
+    if (!result || !result.body || result.body.length === 0) {
+      return;
+    }
+    
+    const body = result.body[0];
+    let keypoints = [];
+    
+    if (Array.isArray(body.keypoints) && body.keypoints.length > 0) {
+      keypoints = body.keypoints;
+    } else if (Array.isArray(body.pose) && body.pose.length > 0) {
+      keypoints = body.pose;
+    } else if (body.keypoints && typeof body.keypoints === 'object') {
+      keypoints = Object.values(body.keypoints);
+    } else {
+      for (const key in body) {
+        if (Array.isArray(body[key]) && body[key].length > 0) {
+          const firstItem = body[key][0];
+          if (firstItem && (firstItem.x !== undefined || firstItem[0] !== undefined)) {
+            keypoints = body[key];
+            break;
+          }
         }
+      }
+    }
+    
+    if (keypoints.length === 0) {
+      return;
+    }
+    
+    const flipX = (x) => videoWidth - x;
+    const getKeypointCoords = (kp) => {
+      if (!kp) return null;
+      if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+        return { x: kp.position[0], y: kp.position[1], score: kp.score || 1 };
+      } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+        return { x: kp.positionRaw[0], y: kp.positionRaw[1], score: kp.score || 1 };
+      } else if (kp.x !== undefined && kp.y !== undefined) {
+        return { x: kp.x, y: kp.y, score: kp.score || kp.confidence || 1 };
+      } else if (Array.isArray(kp) && kp.length >= 2) {
+        return { x: kp[0], y: kp[1], score: kp[2] || 1 };
+      }
+      return null;
+    };
+    
+    ctx.strokeStyle = "rgba(0, 255, 0, 0.6)";
+    ctx.lineWidth = 2;
+    
+    const keypointsByPart = {};
+    for (let i = 0; i < keypoints.length; i++) {
+      if (keypoints[i].part) {
+        keypointsByPart[keypoints[i].part] = keypoints[i];
+      }
+    }
+    const partConnections = [
+      ['nose', 'leftEye'], ['nose', 'rightEye'],
+      ['leftEye', 'leftEar'], ['rightEye', 'rightEar'],
+      ['leftShoulder', 'rightShoulder'],
+      ['leftShoulder', 'leftElbow'], ['leftElbow', 'leftWrist'],
+      ['rightShoulder', 'rightElbow'], ['rightElbow', 'rightWrist'],
+      ['leftShoulder', 'leftHip'], ['rightShoulder', 'rightHip'],
+      ['leftHip', 'rightHip'],
+      ['leftHip', 'leftKnee'], ['leftKnee', 'leftAnkle'],
+      ['rightHip', 'rightKnee'], ['rightKnee', 'rightAnkle'],
+    ];
+    
+    for (const [part1, part2] of partConnections) {
+      const kp1 = keypointsByPart[part1];
+      const kp2 = keypointsByPart[part2];
+      if (kp1 && kp2) {
+        const coords1 = getKeypointCoords(kp1);
+        const coords2 = getKeypointCoords(kp2);
+        if (coords1 && coords2 && coords1.score > 0.1 && coords2.score > 0.1) {
+          ctx.beginPath();
+          ctx.moveTo(flipX(coords1.x), coords1.y);
+          ctx.lineTo(flipX(coords2.x), coords2.y);
+          ctx.stroke();
+        }
+      }
+    }
+    
+    for (let i = 0; i < keypoints.length; i++) {
+      const kp = keypoints[i];
+      if (!kp) continue;
+      
+      let x = null, y = null;
+      if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+        x = kp.position[0];
+        y = kp.position[1];
+      } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+        x = kp.positionRaw[0];
+        y = kp.positionRaw[1];
+      } else if (kp.x !== undefined && kp.y !== undefined) {
+        x = kp.x;
+        y = kp.y;
+      } else if (Array.isArray(kp) && kp.length >= 2) {
+        x = kp[0];
+        y = kp[1];
+      }
+      
+      const score = kp.score || kp.confidence || 1;
+      
+      if (x !== null && y !== null && x > 0 && y > 0 && score > 0.1) {
+        const flippedX = flipX(x);
+        ctx.beginPath();
+        ctx.arc(flippedX, y, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = "rgba(0, 255, 0, 0.7)";
+        ctx.fill();
       }
     }
   };
 
-  // 실시간 자세 감지
   useEffect(() => {
     if (!detector) return;
     const interval = setInterval(async () => {
       if (!detector || !webcamRef.current || webcamRef.current.video.readyState !== 4) return;
       const video = webcamRef.current.video;
-      const poses = await detector.estimatePoses(video);
-      drawKeypoints(poses);
-    }, 100); // 0.1초마다
+      const result = await detector.detect(video);
+      drawKeypoints(result);
+    }, 100);
     return () => clearInterval(interval);
   }, [detector]);
 
-  // 5. "이 포즈 50번 학습" 버튼 핸들러
   const handleLearnPose = async () => {
     if (!detector || !webcamRef.current || !poseName) {
       alert("AI가 로드되지 않았거나 포즈 이름이 비었습니다.");
@@ -120,25 +202,21 @@ export default function TrainAiPage() {
       setStatusText(`'${poseName}' 포즈 50번 학습 시작... 움직이지 마세요!`);
       
       for (let i = 0; i < 50; i++) {
-        // 1. 현재 웹캠에서 관절 좌표 추출
         const video = webcamRef.current.video;
-        const poses = await detector.estimatePoses(video);
-        if (poses.length === 0) {
-          console.log("사람이 감지되지 않아 중단");
-          continue; // 다음 루프
+        const result = await detector.detect(video);
+        if (!result.body || result.body.length === 0) {
+          continue;
         }
 
-        // 2. 17개 관절 좌표를 1차원 배열(34개 숫자)로 변환
-        const features = poses[0].keypoints.flatMap(kp => [kp.x, kp.y]);
+        const keypoints = result.body[0].keypoints || [];
+        const features = keypoints.flatMap(kp => [kp.x, kp.y]);
 
-        // 3. 백엔드 API 1번(/api/train) 호출
         try {
           const response = await axios.post(`${API_URL}/api/train`, {
             label: poseName,
             features: features
           });
           
-          // (UI) 백엔드가 알려준 횟수로 업데이트
           setPoseCounts(prevCounts => ({
             ...prevCounts,
             [poseName]: response.data.count 
@@ -150,10 +228,9 @@ export default function TrainAiPage() {
           return;
         }
         
-        await new Promise(resolve => setTimeout(resolve, 100)); // 0.1초 대기
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
-      // 학습 완료 후 전체 횟수 다시 가져오기
       const response = await axios.get(`${API_URL}/api/pose-counts`);
       setPoseCounts(response.data);
       
@@ -165,13 +242,11 @@ export default function TrainAiPage() {
     }
   };
 
-  // 6. "AI 모델 학습" 핸들러
   const handleTrainModel = async () => {
     setStatusText("AI 뇌(Python)가 학습을 시작합니다... (몇 초 걸림)");
     try {
-      // 백엔드 API 2번(/api/train-model) 호출
       const response = await axios.post(`${API_URL}/api/train-model`);
-      setStatusText(response.data.message); // "모델 학습 완료!"
+      setStatusText(response.data.message);
       alert("AI 뇌(모델)가 성공적으로 학습되었습니다!");
     } catch (err) {
       console.error(err);
@@ -179,11 +254,29 @@ export default function TrainAiPage() {
     }
   };
 
+  const handleResetAll = async () => {
+    const confirmed = window.confirm(
+      "⚠️ 경고: 모든 학습 데이터와 모델이 삭제됩니다!\n\n" +
+      "이 작업은 되돌릴 수 없습니다. 정말 삭제하시겠습니까?"
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      setStatusText("전체 데이터 삭제 중...");
+      const response = await axios.delete(`${API_URL}/api/reset-all`);
+      setPoseCounts({}); // UI 상태 초기화
+      setStatusText(response.data.message || "전체 데이터 삭제 완료!");
+      alert("✅ " + (response.data.message || "전체 데이터가 삭제되었습니다."));
+    } catch (err) {
+      console.error(err);
+      setStatusText(err.response?.data?.detail || "데이터 삭제 실패");
+      alert("❌ 삭제 중 오류가 발생했습니다: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
   return (
-    // NEW: flexWrap: "wrap" 추가 (화면이 좁으면 줄바꿈)
     <div style={{ display: "flex", gap: "40px", justifyContent: "center", padding: "20px", flexWrap: "wrap" }}>
-      
-      {/* 왼쪽: AI 학습 화면 */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: videoWidth }}>
         <h1>AI 포즈 챌린지 - 학습 페이지</h1>
         <p>{statusText}</p>
@@ -221,7 +314,6 @@ export default function TrainAiPage() {
         </button>
       </div>
       
-      {/* 오른쪽: 학습 컨트롤러 */}
       <div style={{ width: "300px", paddingTop: "60px" }}>
         <div style={{ backgroundColor: "#f0f0f0", padding: "20px", borderRadius: "10px" }}>
           <h3>1. 학습할 포즈 선택</h3>
@@ -267,16 +359,42 @@ export default function TrainAiPage() {
         <div style={{ backgroundColor: "#f0f0f0", padding: "20px", borderRadius: "10px", marginTop: '20px' }}>
             <h3>현재 학습된 포즈 횟수:</h3>
             <ul style={{ listStyleType: 'none', padding: 0 }}>
-                {Object.entries(poseCounts).map(([label, count]) => (
+                {Object.entries(poseCounts).length > 0 ? (
+                  Object.entries(poseCounts).map(([label, count]) => (
                     <li key={label} style={{ fontSize: '1.1rem' }}>
                         {label}: <strong>{count}</strong> 장
                     </li>
-                ))}
+                  ))
+                ) : (
+                  <li style={{ fontSize: '1rem', color: '#666' }}>학습된 데이터가 없습니다.</li>
+                )}
             </ul>
+        </div>
+
+        <div style={{ backgroundColor: "#fff3cd", padding: "20px", borderRadius: "10px", marginTop: '20px', border: "2px solid #ffc107" }}>
+          <h3 style={{ color: '#856404', marginTop: 0 }}>⚠️ 위험한 작업</h3>
+          <button 
+            onClick={handleResetAll}
+            style={{ 
+              width: '100%', 
+              padding: "12px 24px", 
+              fontSize: "1rem", 
+              color: "#fff", 
+              backgroundColor: "#dc3545", 
+              border: "none", 
+              borderRadius: "10px", 
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            전체 데이터 삭제
+          </button>
+          <p style={{ fontSize: '0.9rem', color: '#856404', marginTop: '10px', marginBottom: 0 }}>
+            모든 학습 데이터와 모델을 삭제합니다. 되돌릴 수 없습니다!
+          </p>
         </div>
       </div>
 
-      {/* 저작권 문구 */}
       <div
         style={{
           position: 'fixed',
@@ -301,6 +419,39 @@ export default function TrainAiPage() {
         </div>
         <div style={{ fontSize: '0.8rem' }}>
           © 2025 | All rights reserved
+        </div>
+        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
+          <a 
+            href="#" 
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/');
+            }}
+            style={{ 
+              color: 'rgba(245, 245, 245, 0.8)', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+          >
+            HOME
+          </a>
+          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
+          <a 
+            href="https://github.com/leeeeesiyeon/oss-snapshot" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              color: 'rgba(245, 245, 245, 0.8)', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+          >
+            GitHub
+          </a>
         </div>
       </div>
     </div>

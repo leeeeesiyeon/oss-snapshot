@@ -44,15 +44,10 @@ export default function PrintPage() {
 
   const handleSave = () => {
     if (!frameRef.current) {
-      console.error('frameRef is null');
       alert('저장할 수 없습니다. 페이지를 새로고침해주세요.');
       return;
     }
 
-    // 저장 시작 알림
-    console.log('저장 시작...');
-
-    // 이미지 로드 완료 대기
     const images = frameRef.current.querySelectorAll('img');
     const imagePromises = Array.from(images).map((img) => {
       if (img.complete && img.naturalWidth > 0) {
@@ -60,7 +55,6 @@ export default function PrintPage() {
       }
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {
-          console.warn('이미지 로드 타임아웃:', img.src);
           resolve();
         }, 5000);
         
@@ -70,21 +64,14 @@ export default function PrintPage() {
         };
         img.onerror = () => {
           clearTimeout(timeout);
-          console.error('이미지 로드 실패:', img.src);
           resolve();
         };
       });
     });
 
     Promise.all(imagePromises).then(() => {
-      console.log('모든 이미지 로드 완료, 캔버스 생성 시작...');
-      
-      // DOM이 완전히 업데이트되도록 약간의 지연 추가
-      // requestAnimationFrame을 사용하여 브라우저 렌더링 사이클과 동기화
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          // 저장용 div는 이미 화면 밖에 있지만 렌더링되도록 보장
-          // html2canvas는 화면 밖 요소도 캡처할 수 있음
           html2canvas(frameRef.current, {
             useCORS: true,
             backgroundColor: null,
@@ -98,23 +85,11 @@ export default function PrintPage() {
             x: 0,
             y: 0,
             scrollX: 0,
-            scrollY: 0,
-            onclone: (clonedDoc) => {
-              // 클론된 문서에서도 이미지가 제대로 로드되었는지 확인
-              const clonedImages = clonedDoc.querySelectorAll('img');
-              clonedImages.forEach((img) => {
-                if (!img.complete || img.naturalWidth === 0) {
-                  console.warn('클론된 이미지가 로드되지 않음:', img.src);
-                }
-              });
-            }
+            scrollY: 0
           }).then((canvas) => {
-            console.log('캔버스 생성 완료, 파일 다운로드 시작...');
-            
             try {
               canvas.toBlob((blob) => {
                 if (!blob) {
-                  console.error('Blob 생성 실패');
                   alert('이미지 생성에 실패했습니다. 다시 시도해주세요.');
                   return;
                 }
@@ -128,25 +103,20 @@ export default function PrintPage() {
                 document.body.appendChild(link);
                 link.click();
                 
-                // 정리
                 setTimeout(() => {
                   document.body.removeChild(link);
                   URL.revokeObjectURL(url);
-                  console.log('파일 다운로드 완료');
                 }, 100);
               }, 'image/png', 1.0);
             } catch (error) {
-              console.error('파일 저장 중 오류:', error);
               alert('파일 저장 중 오류가 발생했습니다: ' + error.message);
             }
           }).catch((error) => {
-            console.error('Canvas generation error:', error);
             alert('이미지 생성에 실패했습니다: ' + error.message);
           });
         });
       });
-    }).catch((error) => {
-      console.error('이미지 로드 중 오류:', error);
+    }).catch(() => {
       alert('이미지 로드 중 오류가 발생했습니다.');
     });
   };
@@ -177,6 +147,39 @@ export default function PrintPage() {
           </div>
           <div style={{ fontSize: '0.8rem' }}>
             © 2025 | All rights reserved
+          </div>
+          <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
+            <a 
+              href="#" 
+              onClick={(e) => {
+                e.preventDefault();
+                navigate('/');
+              }}
+              style={{ 
+                color: 'rgba(245, 245, 245, 0.8)', 
+                textDecoration: 'none',
+                cursor: 'pointer'
+              }}
+              onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+              onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+            >
+              HOME
+            </a>
+            <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
+            <a 
+              href="https://github.com/leeeeesiyeon/oss-snapshot" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ 
+                color: 'rgba(245, 245, 245, 0.8)', 
+                textDecoration: 'none',
+                cursor: 'pointer'
+              }}
+              onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+              onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+            >
+              GitHub
+            </a>
           </div>
         </div>
       </div>
@@ -456,6 +459,39 @@ export default function PrintPage() {
         </div>
         <div style={{ fontSize: '0.8rem' }}>
           © 2025 | All rights reserved
+        </div>
+        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
+          <a 
+            href="#" 
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/');
+            }}
+            style={{ 
+              color: 'rgba(245, 245, 245, 0.8)', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+          >
+            HOME
+          </a>
+          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
+          <a 
+            href="https://github.com/leeeeesiyeon/oss-snapshot" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              color: 'rgba(245, 245, 245, 0.8)', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+          >
+            GitHub
+          </a>
         </div>
       </div>
     </div>
