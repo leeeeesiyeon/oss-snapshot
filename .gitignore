@@ -14,6 +14,7 @@ env/
 
 # Build outputs
 dist/
+dist-ssr/
 build/
 *.egg-info/
 
@@ -38,6 +39,7 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+*.local
 
 # Model files (if too large)
 *.pkl

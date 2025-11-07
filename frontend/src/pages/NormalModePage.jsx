@@ -19,6 +19,7 @@ export default function NormalModePage() {
   const [statusText, setStatusText] = useState("Get ready");
   const [isShooting, setIsShooting] = useState(false);
   const [currentPhotoNumber, setCurrentPhotoNumber] = useState(1);
+  const [isFlashing, setIsFlashing] = useState(false);
   
   const capturedPhotosRef = useRef([]);
   const isShootingRef = useRef(false);
@@ -67,7 +68,9 @@ export default function NormalModePage() {
         setStatusText("Click");
         
         setTimeout(() => {
+          setIsFlashing(true);
           const imageSrc = webcamRef.current.getScreenshot();
+          setTimeout(() => setIsFlashing(false), 150);
           setCapturedPhotos(prevPhotos => {
             const newPhotos = [...prevPhotos, imageSrc];
             const newLength = newPhotos.length;
@@ -304,6 +307,29 @@ export default function NormalModePage() {
                   Capture Complete
                 </h2>
               </div>
+            )}
+            {isFlashing && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: `
+                    radial-gradient(ellipse 60% 80% at 30% 40%, rgba(245, 245, 245, 0.15) 0%, transparent 50%),
+                    radial-gradient(ellipse 80% 50% at 70% 60%, rgba(245, 245, 245, 0.25) 0%, transparent 60%),
+                    radial-gradient(ellipse 50% 70% at 50% 50%, rgba(245, 245, 245, 0.1) 0%, transparent 45%),
+                    radial-gradient(ellipse 70% 60% at 20% 70%, rgba(245, 245, 245, 0.2) 0%, transparent 55%),
+                    radial-gradient(ellipse 55% 75% at 80% 30%, rgba(245, 245, 245, 0.18) 0%, transparent 50%),
+                    radial-gradient(circle, transparent 0%, transparent 25%, rgba(245, 245, 245, 0.3) 50%, rgba(245, 245, 245, 0.6) 75%, rgba(245, 245, 245, 0.85) 90%, rgba(245, 245, 245, 0.95) 100%)
+                  `,
+                  filter: 'blur(40px)',
+                  transition: 'opacity 0.15s ease-out',
+                  zIndex: 100,
+                  pointerEvents: 'none'
+                }}
+              />
             )}
           </div>
         </div>

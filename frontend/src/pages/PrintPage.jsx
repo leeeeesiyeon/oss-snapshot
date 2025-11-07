@@ -388,7 +388,8 @@ export default function PrintPage() {
               objectFit: 'contain',
               display: 'block',
               position: 'relative',
-              zIndex: 2
+              zIndex: 2,
+              outline: frame === 'black' ? '0.5px solid rgba(255, 255, 255, 0.8)' : 'none'
             }}
           />
         </div>
