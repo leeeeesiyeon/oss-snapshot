@@ -46,8 +46,8 @@ export default function TrainAiPage() {
           modelBasePath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
           backend: 'webgl',
           modelPath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
-          face: { enabled: false },
-          hand: { enabled: false },
+          face: { enabled: true },
+          hand: { enabled: true },
           object: { enabled: false },
           segmentation: { enabled: false },
           body: { enabled: true },
@@ -63,8 +63,8 @@ export default function TrainAiPage() {
             modelBasePath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
             backend: 'cpu',
             modelPath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
-            face: { enabled: false },
-            hand: { enabled: false },
+            face: { enabled: true },
+            hand: { enabled: true },
             object: { enabled: false },
             segmentation: { enabled: false },
             body: { enabled: true },
@@ -79,6 +79,19 @@ export default function TrainAiPage() {
       }
     };
     load();
+  }, []);
+
+  // 페이지 로드 시 poseCounts 가져오기
+  useEffect(() => {
+    const fetchPoseCounts = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/pose-counts`);
+        setPoseCounts(response.data);
+      } catch (err) {
+        console.error('Failed to fetch pose counts:', err);
+      }
+    };
+    fetchPoseCounts();
   }, []);
 
   // 포즈 선택 시 상태 텍스트 업데이트
@@ -105,34 +118,7 @@ export default function TrainAiPage() {
     canvas.height = videoHeight;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    if (!result || !result.body || result.body.length === 0) {
-      return;
-    }
-    
-    const body = result.body[0];
-    let keypoints = [];
-    
-    if (Array.isArray(body.keypoints) && body.keypoints.length > 0) {
-      keypoints = body.keypoints;
-    } else if (Array.isArray(body.pose) && body.pose.length > 0) {
-      keypoints = body.pose;
-    } else if (body.keypoints && typeof body.keypoints === 'object') {
-      keypoints = Object.values(body.keypoints);
-    } else {
-      for (const key in body) {
-        if (Array.isArray(body[key]) && body[key].length > 0) {
-          const firstItem = body[key][0];
-          if (firstItem && (firstItem.x !== undefined || firstItem[0] !== undefined)) {
-            keypoints = body[key];
-            break;
-          }
-        }
-      }
-    }
-    
-    if (keypoints.length === 0) {
-      return;
-    }
+    if (!result) return;
     
     const flipX = (x) => videoWidth - x;
     const getKeypointCoords = (kp) => {
@@ -149,82 +135,266 @@ export default function TrainAiPage() {
       return null;
     };
     
-    ctx.strokeStyle = "rgba(189, 30, 20, 0.6)";
-    ctx.lineWidth = 2;
-    
-    const keypointsByPart = {};
-    for (let i = 0; i < keypoints.length; i++) {
-      if (keypoints[i].part) {
-        keypointsByPart[keypoints[i].part] = keypoints[i];
+    const drawKeypoint = (x, y, color, size = 5) => {
+      if (x !== null && y !== null && x > 0 && y > 0) {
+        const flippedX = flipX(x);
+        ctx.beginPath();
+        ctx.arc(flippedX, y, size, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
       }
-    }
-    const partConnections = [
-      ['nose', 'leftEye'], ['nose', 'rightEye'],
-      ['leftEye', 'leftEar'], ['rightEye', 'rightEar'],
-      ['leftShoulder', 'rightShoulder'],
-      ['leftShoulder', 'leftElbow'], ['leftElbow', 'leftWrist'],
-      ['rightShoulder', 'rightElbow'], ['rightElbow', 'rightWrist'],
-      ['leftShoulder', 'leftHip'], ['rightShoulder', 'rightHip'],
-      ['leftHip', 'rightHip'],
-      ['leftHip', 'leftKnee'], ['leftKnee', 'leftAnkle'],
-      ['rightHip', 'rightKnee'], ['rightKnee', 'rightAnkle'],
-    ];
+    };
     
-    for (const [part1, part2] of partConnections) {
-      const kp1 = keypointsByPart[part1];
-      const kp2 = keypointsByPart[part2];
-      if (kp1 && kp2) {
-        const coords1 = getKeypointCoords(kp1);
-        const coords2 = getKeypointCoords(kp2);
-        if (coords1 && coords2 && coords1.score > 0.1 && coords2.score > 0.1) {
-          ctx.beginPath();
-          ctx.moveTo(flipX(coords1.x), coords1.y);
-          ctx.lineTo(flipX(coords2.x), coords2.y);
-          ctx.stroke();
+    const drawLine = (x1, y1, x2, y2, color, lineWidth = 2) => {
+      if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(flipX(x1), y1);
+        ctx.lineTo(flipX(x2), y2);
+        ctx.stroke();
+      }
+    };
+    
+    // Body keypoints 그리기 (빨간색)
+    if (result.body && result.body.length > 0) {
+      const body = result.body[0];
+      let keypoints = [];
+      
+      if (Array.isArray(body.keypoints) && body.keypoints.length > 0) {
+        keypoints = body.keypoints;
+      } else if (Array.isArray(body.pose) && body.pose.length > 0) {
+        keypoints = body.pose;
+      } else if (body.keypoints && typeof body.keypoints === 'object') {
+        keypoints = Object.values(body.keypoints);
+      } else {
+        for (const key in body) {
+          if (Array.isArray(body[key]) && body[key].length > 0) {
+            const firstItem = body[key][0];
+            if (firstItem && (firstItem.x !== undefined || firstItem[0] !== undefined)) {
+              keypoints = body[key];
+              break;
+            }
+          }
+        }
+      }
+      
+      ctx.strokeStyle = "rgba(189, 30, 20, 0.6)";
+      ctx.lineWidth = 2;
+      
+      const keypointsByPart = {};
+      for (let i = 0; i < keypoints.length; i++) {
+        if (keypoints[i].part) {
+          keypointsByPart[keypoints[i].part] = keypoints[i];
+        }
+      }
+      const partConnections = [
+        ['nose', 'leftEye'], ['nose', 'rightEye'],
+        ['leftEye', 'leftEar'], ['rightEye', 'rightEar'],
+        ['leftShoulder', 'rightShoulder'],
+        ['leftShoulder', 'leftElbow'], ['leftElbow', 'leftWrist'],
+        ['rightShoulder', 'rightElbow'], ['rightElbow', 'rightWrist'],
+        ['leftShoulder', 'leftHip'], ['rightShoulder', 'rightHip'],
+        ['leftHip', 'rightHip'],
+        ['leftHip', 'leftKnee'], ['leftKnee', 'leftAnkle'],
+        ['rightHip', 'rightKnee'], ['rightKnee', 'rightAnkle'],
+      ];
+      
+      for (const [part1, part2] of partConnections) {
+        const kp1 = keypointsByPart[part1];
+        const kp2 = keypointsByPart[part2];
+        if (kp1 && kp2) {
+          const coords1 = getKeypointCoords(kp1);
+          const coords2 = getKeypointCoords(kp2);
+          if (coords1 && coords2 && coords1.score > 0.1 && coords2.score > 0.1) {
+            drawLine(coords1.x, coords1.y, coords2.x, coords2.y, "rgba(189, 30, 20, 0.6)", 2);
+          }
+        }
+      }
+      
+      for (let i = 0; i < keypoints.length; i++) {
+        const kp = keypoints[i];
+        if (!kp) continue;
+        
+        let x = null, y = null;
+        if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+          x = kp.position[0];
+          y = kp.position[1];
+        } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+          x = kp.positionRaw[0];
+          y = kp.positionRaw[1];
+        } else if (kp.x !== undefined && kp.y !== undefined) {
+          x = kp.x;
+          y = kp.y;
+        } else if (Array.isArray(kp) && kp.length >= 2) {
+          x = kp[0];
+          y = kp[1];
+        }
+        
+        const score = kp.score || kp.confidence || 1;
+        
+        if (x !== null && y !== null && x > 0 && y > 0 && score > 0.1) {
+          drawKeypoint(x, y, "rgba(189, 30, 20, 0.7)", 5);
         }
       }
     }
     
-    for (let i = 0; i < keypoints.length; i++) {
-      const kp = keypoints[i];
-      if (!kp) continue;
+    // Face keypoints 그리기 (파란색)
+    if (result.face && result.face.length > 0) {
+      const face = result.face[0];
+      let faceKeypoints = [];
       
-      let x = null, y = null;
-      if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
-        x = kp.position[0];
-        y = kp.position[1];
-      } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
-        x = kp.positionRaw[0];
-        y = kp.positionRaw[1];
-      } else if (kp.x !== undefined && kp.y !== undefined) {
-        x = kp.x;
-        y = kp.y;
-      } else if (Array.isArray(kp) && kp.length >= 2) {
-        x = kp[0];
-        y = kp[1];
+      if (face.keypoints && Array.isArray(face.keypoints)) {
+        faceKeypoints = face.keypoints;
+      } else if (face.landmarks && Array.isArray(face.landmarks)) {
+        faceKeypoints = face.landmarks;
       }
       
-      const score = kp.score || kp.confidence || 1;
+      // 얼굴 keypoints 점 그리기
+      for (const kp of faceKeypoints) {
+        if (!kp) continue;
+        
+        let x = null, y = null;
+        if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+          x = kp.position[0];
+          y = kp.position[1];
+        } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+          x = kp.positionRaw[0];
+          y = kp.positionRaw[1];
+        } else if (kp.x !== undefined && kp.y !== undefined) {
+          x = kp.x;
+          y = kp.y;
+        } else if (Array.isArray(kp) && kp.length >= 2) {
+          x = kp[0];
+          y = kp[1];
+        }
+        
+        if (x !== null && y !== null) {
+          drawKeypoint(x, y, "rgba(0, 100, 255, 0.7)", 4); // 파란색
+        }
+      }
       
-      if (x !== null && y !== null && x > 0 && y > 0 && score > 0.1) {
-        const flippedX = flipX(x);
-        ctx.beginPath();
-        ctx.arc(flippedX, y, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = "rgba(189, 30, 20, 0.7)";
-        ctx.fill();
+      // 얼굴 윤곽선 그리기 (눈, 입 등)
+      if (faceKeypoints.length > 0) {
+        // 눈 연결선
+        const leftEyeIndices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
+        const rightEyeIndices = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
+        const mouthIndices = [61, 146, 91, 181, 84, 17, 314, 405, 320, 307, 375, 321, 308, 324, 318];
+        
+        const drawFaceContour = (indices, color) => {
+          for (let i = 0; i < indices.length - 1; i++) {
+            const kp1 = faceKeypoints[indices[i]];
+            const kp2 = faceKeypoints[indices[i + 1]];
+            if (kp1 && kp2) {
+              const coords1 = getKeypointCoords(kp1);
+              const coords2 = getKeypointCoords(kp2);
+              if (coords1 && coords2) {
+                drawLine(coords1.x, coords1.y, coords2.x, coords2.y, color, 1);
+              }
+            }
+          }
+        };
+        
+        // 간단하게 모든 얼굴 keypoints를 점으로 표시
+        // Human.js의 얼굴 keypoints는 보통 468개이므로 모두 점으로 표시
+      }
+    }
+    
+    // Hand keypoints 그리기 (초록색)
+    if (result.hand && result.hand.length > 0) {
+      for (const hand of result.hand) {
+        let handKeypoints = [];
+        
+        if (hand.keypoints && Array.isArray(hand.keypoints)) {
+          handKeypoints = hand.keypoints;
+        } else if (hand.landmarks && Array.isArray(hand.landmarks)) {
+          handKeypoints = hand.landmarks;
+        } else if (hand.points && Array.isArray(hand.points)) {
+          handKeypoints = hand.points;
+        }
+        
+        // 손가락 관절 점 그리기
+        for (const kp of handKeypoints) {
+          if (!kp) continue;
+          
+          let x = null, y = null;
+          if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+            x = kp.position[0];
+            y = kp.position[1];
+          } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+            x = kp.positionRaw[0];
+            y = kp.positionRaw[1];
+          } else if (kp.x !== undefined && kp.y !== undefined) {
+            x = kp.x;
+            y = kp.y;
+          } else if (Array.isArray(kp) && kp.length >= 2) {
+            x = kp[0];
+            y = kp[1];
+          }
+          
+          if (x !== null && y !== null) {
+            drawKeypoint(x, y, "rgba(0, 255, 0, 0.7)", 4); // 초록색
+          }
+        }
+        
+        // 손가락 연결선 그리기 (21개 keypoints: 손목 0, 각 손가락당 4개)
+        // 손목(0) -> 엄지(1-4) -> 검지(5-8) -> 중지(9-12) -> 약지(13-16) -> 소지(17-20)
+        const handConnections = [
+          [0, 1], [1, 2], [2, 3], [3, 4], // 엄지
+          [0, 5], [5, 6], [6, 7], [7, 8], // 검지
+          [0, 9], [9, 10], [10, 11], [11, 12], // 중지
+          [0, 13], [13, 14], [14, 15], [15, 16], // 약지
+          [0, 17], [17, 18], [18, 19], [19, 20], // 소지
+        ];
+        
+        for (const [idx1, idx2] of handConnections) {
+          if (handKeypoints[idx1] && handKeypoints[idx2]) {
+            const coords1 = getKeypointCoords(handKeypoints[idx1]);
+            const coords2 = getKeypointCoords(handKeypoints[idx2]);
+            if (coords1 && coords2) {
+              drawLine(coords1.x, coords1.y, coords2.x, coords2.y, "rgba(0, 255, 0, 0.5)", 2);
+            }
+          }
+        }
       }
     }
   };
 
   useEffect(() => {
     if (!detector) return;
-    const interval = setInterval(async () => {
-      if (!detector || !webcamRef.current || webcamRef.current.video.readyState !== 4) return;
-      const video = webcamRef.current.video;
-      const result = await detector.detect(video);
-      drawKeypoints(result);
-    }, 100);
-    return () => clearInterval(interval);
+    
+    let animationFrameId = null;
+    let isRunning = true;
+    
+    const detectAndDraw = async () => {
+      if (!isRunning || !detector || !webcamRef.current || webcamRef.current.video.readyState !== 4) {
+        if (isRunning) {
+          animationFrameId = requestAnimationFrame(detectAndDraw);
+        }
+        return;
+      }
+      
+      try {
+        const video = webcamRef.current.video;
+        const result = await detector.detect(video);
+        drawKeypoints(result);
+      } catch (err) {
+        console.error('Detection error:', err);
+      }
+      
+      if (isRunning) {
+        animationFrameId = requestAnimationFrame(detectAndDraw);
+      }
+    };
+    
+    animationFrameId = requestAnimationFrame(detectAndDraw);
+    
+    return () => {
+      isRunning = false;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, [detector]);
 
   const handleLearnPose = async () => {
@@ -236,40 +406,211 @@ export default function TrainAiPage() {
     try {
       setStatusText(`Starting 50 training samples for '${poseName}' pose... Don't move!`);
       
+      let successCount = 0;
+      let skippedCount = 0;
+      
       for (let i = 0; i < 50; i++) {
         const video = webcamRef.current.video;
         const result = await detector.detect(video);
-        if (!result.body || result.body.length === 0) {
+        
+        let features = [];
+        
+        // Body keypoints 추출
+        if (result.body && result.body.length > 0) {
+          const body = result.body[0];
+          let keypoints = [];
+          
+          // 키포인트 추출 로직 (drawKeypoints와 동일)
+          if (Array.isArray(body.keypoints) && body.keypoints.length > 0) {
+            keypoints = body.keypoints;
+          } else if (Array.isArray(body.pose) && body.pose.length > 0) {
+            keypoints = body.pose;
+          } else {
+            for (const key in body) {
+              if (Array.isArray(body[key]) && body[key].length > 0) {
+                const firstItem = body[key][0];
+                if (firstItem && (firstItem.x !== undefined || firstItem[0] !== undefined)) {
+                  keypoints = body[key];
+                  break;
+                }
+              }
+            }
+          }
+          
+          // Body 키포인트를 features 배열로 변환
+          for (const kp of keypoints) {
+            if (!kp) continue;
+            
+            let x = null, y = null;
+            if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+              x = kp.position[0];
+              y = kp.position[1];
+            } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+              x = kp.positionRaw[0];
+              y = kp.positionRaw[1];
+            } else if (kp.x !== undefined && kp.y !== undefined) {
+              x = kp.x;
+              y = kp.y;
+            } else if (Array.isArray(kp) && kp.length >= 2) {
+              x = kp[0];
+              y = kp[1];
+            }
+            
+            if (x !== null && y !== null) {
+              features.push(x);
+              features.push(y);
+            }
+          }
+        }
+        
+        // Face keypoints 추출 (윙크, 놀람 등 얼굴 포즈를 위해 - 입 벌림 여부도 포함)
+        if (result.face && result.face.length > 0) {
+          const face = result.face[0];
+          if (face.keypoints && Array.isArray(face.keypoints)) {
+            // 얼굴 keypoints 추가 (눈, 입 등 모든 얼굴 특징점)
+            for (const kp of face.keypoints) {
+              if (!kp) continue;
+              
+              let x = null, y = null;
+              if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+                x = kp.position[0];
+                y = kp.position[1];
+              } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+                x = kp.positionRaw[0];
+                y = kp.positionRaw[1];
+              } else if (kp.x !== undefined && kp.y !== undefined) {
+                x = kp.x;
+                y = kp.y;
+              } else if (Array.isArray(kp) && kp.length >= 2) {
+                x = kp[0];
+                y = kp[1];
+              }
+              
+              if (x !== null && y !== null) {
+                features.push(x);
+                features.push(y);
+              }
+            }
+          }
+        }
+        
+        // Hand keypoints 추출 (V sign, Close up 등 손 포즈를 위해)
+        // Human.js는 각 손마다 21개의 keypoints 제공 (손목 1개 + 각 손가락당 4개 관절)
+        if (result.hand && result.hand.length > 0) {
+          // 양손 모두 처리
+          for (const hand of result.hand) {
+            // Human.js는 keypoints 또는 landmarks를 제공할 수 있음
+            let handKeypoints = [];
+            
+            if (hand.keypoints && Array.isArray(hand.keypoints)) {
+              handKeypoints = hand.keypoints;
+            } else if (hand.landmarks && Array.isArray(hand.landmarks)) {
+              handKeypoints = hand.landmarks;
+            } else if (hand.points && Array.isArray(hand.points)) {
+              handKeypoints = hand.points;
+            }
+            
+            // 손 keypoints 추가 (손가락 위치 등 - 각 손가락의 관절까지 포함)
+            for (const kp of handKeypoints) {
+              if (!kp) continue;
+              
+              let x = null, y = null;
+              if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+                x = kp.position[0];
+                y = kp.position[1];
+              } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+                x = kp.positionRaw[0];
+                y = kp.positionRaw[1];
+              } else if (kp.x !== undefined && kp.y !== undefined) {
+                x = kp.x;
+                y = kp.y;
+              } else if (Array.isArray(kp) && kp.length >= 2) {
+                x = kp[0];
+                y = kp[1];
+              }
+              
+              if (x !== null && y !== null) {
+                features.push(x);
+                features.push(y);
+              }
+            }
+          }
+        }
+        
+        if (features.length === 0) {
+          // 포즈가 감지되지 않은 경우 (배경 포즈 등)
+          // 빈 배열이나 기본값을 보내거나 스킵
+          skippedCount++;
+          setStatusText(`Training '${poseName}' pose... (${i + 1}/50) - Pose not detected`);
+          await new Promise(resolve => setTimeout(resolve, 100));
           continue;
         }
 
-        const keypoints = result.body[0].keypoints || [];
-        const features = keypoints.flatMap(kp => [kp.x, kp.y]);
+        // features가 비어있으면 스킵
+        if (features.length === 0) {
+          skippedCount++;
+          setStatusText(`Training '${poseName}' pose... (${i + 1}/50) - No features extracted`);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          continue;
+        }
 
         try {
+          // 진행 상황 표시
+          setStatusText(`Training '${poseName}' pose... (${i + 1}/50)`);
+          
           const response = await axios.post(`${API_URL}/api/train`, {
             label: poseName,
             features: features
+          }, {
+            timeout: 5000 // 5초 타임아웃 설정
           });
           
+          successCount++;
+          
+          // traincount 즉시 업데이트
           setPoseCounts(prevCounts => ({
             ...prevCounts,
             [poseName]: response.data.count 
           }));
 
         } catch (err) {
-          console.error(err);
-          setStatusText("Please check if the backend server (Terminal 2) is running.");
+          console.error('Training error:', err);
+          console.error('Error details:', {
+            code: err.code,
+            message: err.message,
+            response: err.response?.data,
+            status: err.response?.status
+          });
+          
+          if (err.code === 'ECONNREFUSED' || err.message?.includes('Network Error') || err.code === 'ERR_NETWORK') {
+            setStatusText("Please check if the backend server (Terminal 2) is running.");
+          } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+            setStatusText("Request timeout. Please check the backend server.");
+          } else if (err.response) {
+            setStatusText(`Error: ${err.response.data?.detail || err.response.statusText || 'Unknown error'}`);
+          } else {
+            setStatusText(`Error: ${err.message || 'Failed to connect to backend server'}`);
+          }
           return;
         }
         
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       
-      const response = await axios.get(`${API_URL}/api/pose-counts`);
-      setPoseCounts(response.data);
+      if (successCount === 0) {
+        setStatusText(`Failed: No pose detected. Please ensure you are visible in the camera.`);
+        return;
+      }
       
-      setStatusText(`Completed 50 training samples for '${poseName}' pose!`);
+      // 최종적으로 서버에서 전체 카운트 가져오기
+      try {
+        const response = await axios.get(`${API_URL}/api/pose-counts`);
+        setPoseCounts(response.data);
+      } catch (err) {
+        console.error('Failed to fetch pose counts:', err);
+      }
+      
+      setStatusText(`Completed ${successCount} training samples for '${poseName}' pose! (${skippedCount} skipped)`);
       
     } catch (err) {
       console.error('학습 실패:', err);
@@ -280,13 +621,34 @@ export default function TrainAiPage() {
   const handleTrainModel = async () => {
     setStatusText("AI model (Python) is starting training... (takes a few seconds)");
     try {
-      const response = await axios.post(`${API_URL}/api/train-model`);
+      const response = await axios.post(`${API_URL}/api/train-model`, {}, {
+        timeout: 30000 // 30초 타임아웃
+      });
       setStatusText(response.data.message);
       setPoseCounts({}); // 포즈별 학습 횟수 초기화
       alert("AI model has been successfully trained!");
     } catch (err) {
-      console.error(err);
-      setStatusText(err.response?.data?.detail || "Model training failed");
+      console.error('Model training error:', err);
+      console.error('Error details:', {
+        code: err.code,
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      
+      let errorMessage = "Model training failed";
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.code === 'ECONNREFUSED' || err.message?.includes('Network Error') || err.code === 'ERR_NETWORK') {
+        errorMessage = "Please check if the backend server (Terminal 2) is running.";
+      } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        errorMessage = "Request timeout. Please check the backend server.";
+      } else if (err.message) {
+        errorMessage = `Error: ${err.message}`;
+      }
+      
+      setStatusText(errorMessage);
+      alert(`❌ Model training failed: ${errorMessage}`);
     }
   };
 
@@ -645,7 +1007,7 @@ export default function TrainAiPage() {
       <div
         style={{
           position: 'absolute',
-          top: 'calc(50% + 400px)',
+          top: 'calc(50% + 430px)',
           left: '50%',
           transform: 'translateX(-50%) scale(1.1)',
           transformOrigin: 'center center',
@@ -691,7 +1053,7 @@ export default function TrainAiPage() {
       <div
         style={{
           position: 'absolute',
-          top: 'calc(50% + 460px)',
+          top: 'calc(50% + 480px)',
           left: '50%',
           transform: 'translateX(-50%) scale(1.1)',
           transformOrigin: 'center center',
@@ -710,7 +1072,7 @@ export default function TrainAiPage() {
       <div
         style={{
           position: 'absolute',
-          top: 'calc(50% + 540px)',
+          top: 'calc(50% + 550px)',
           left: '50%',
           transform: 'translateX(-50%) scale(1.1)',
           transformOrigin: 'center center',
