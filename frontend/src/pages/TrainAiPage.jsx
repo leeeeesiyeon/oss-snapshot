@@ -3,6 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import * as Human from '@vladmandic/human';
 import logoWhite from '../assets/images/logo_white.png';
+import cameraBox from '../assets/images/takepicture_camera_box.svg';
+import winkButton from '../assets/images/wink_button.svg';
+import vButton from '../assets/images/v_button.svg';
+import closeupButton from '../assets/images/closeup_button.svg';
+import surpriseButton from '../assets/images/surprise_button.svg';
+import backgroundButton from '../assets/images/background_button.svg';
+import trainButton from '../assets/images/train_button.svg';
+import startAitrainButton from '../assets/images/start_aitrain_button.svg';
+import traincountBox from '../assets/images/traincount_box.svg';
+import deleteButton from '../assets/images/delete_button.svg';
+import gotoHomeButton from '../assets/images/gotohome_button.svg';
 import axios from 'axios';
 
 const API_URL = "http://127.0.0.1:8000";
@@ -10,15 +21,23 @@ const videoWidth = 640;
 const videoHeight = 480;
 const videoConstraints = { width: videoWidth, height: videoHeight, facingMode: "user" };
 
-const AVAILABLE_POSES = ["Wink", "V sign", "Close up", "Surprise", "배경"];
+const AVAILABLE_POSES = ["Wink", "V sign", "Close up", "Surprise", "Background"];
+
+const POSE_BUTTON_MAP = {
+  "Wink": winkButton,
+  "V sign": vButton,
+  "Close up": closeupButton,
+  "Surprise": surpriseButton,
+  "Background": backgroundButton
+};
 
 export default function TrainAiPage() {
   const navigate = useNavigate();
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
   const [detector, setDetector] = useState(null);
-  const [statusText, setStatusText] = useState("AI 모델 로딩 중...");
-  const [poseName, setPoseName] = useState("브이");
+  const [statusText, setStatusText] = useState("Loading AI model...");
+  const [poseName, setPoseName] = useState("Wink");
   const [poseCounts, setPoseCounts] = useState({});
   useEffect(() => {
     const load = async () => {
@@ -35,7 +54,7 @@ export default function TrainAiPage() {
         });
         await human.warmup();
         setDetector(human);
-        setStatusText("AI 준비 완료!");
+        setStatusText("AI Ready!");
       } catch (err) {
         console.error('detector 생성 실패', err);
         // CPU로 다시 시도
@@ -52,15 +71,31 @@ export default function TrainAiPage() {
           });
           await human.warmup();
           setDetector(human);
-          setStatusText("AI 준비 완료!(CPU)");
+          setStatusText("AI Ready! (CPU)");
         } catch (err2) {
           console.error('CPU 백엔드에서도 생성 실패', err2);
-          setStatusText('AI 초기화 실패: 브라우저 WebGL/WebGPU 설정을 확인하세요.');
+          setStatusText('AI initialization failed: Please check your browser WebGL/WebGPU settings.');
         }
       }
     };
     load();
   }, []);
+
+  // 포즈 선택 시 상태 텍스트 업데이트
+  useEffect(() => {
+    if (detector) {
+      // 학습 중이 아닐 때만 상태 텍스트 업데이트
+      const isTraining = statusText.includes("Starting") || 
+                        statusText.includes("Completed") || 
+                        statusText.includes("training") ||
+                        statusText.includes("Deleting") ||
+                        statusText.includes("Loading");
+      
+      if (!isTraining && (statusText === "AI Ready!" || statusText === "AI Ready! (CPU)" || statusText.includes("pose training ready"))) {
+        setStatusText(`"${poseName}" pose training ready`);
+      }
+    }
+  }, [poseName, detector]);
 
   const drawKeypoints = (result) => {
     const canvas = canvasRef.current;
@@ -114,7 +149,7 @@ export default function TrainAiPage() {
       return null;
     };
     
-    ctx.strokeStyle = "rgba(0, 255, 0, 0.6)";
+    ctx.strokeStyle = "rgba(189, 30, 20, 0.6)";
     ctx.lineWidth = 2;
     
     const keypointsByPart = {};
@@ -175,7 +210,7 @@ export default function TrainAiPage() {
         const flippedX = flipX(x);
         ctx.beginPath();
         ctx.arc(flippedX, y, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = "rgba(0, 255, 0, 0.7)";
+        ctx.fillStyle = "rgba(189, 30, 20, 0.7)";
         ctx.fill();
       }
     }
@@ -194,12 +229,12 @@ export default function TrainAiPage() {
 
   const handleLearnPose = async () => {
     if (!detector || !webcamRef.current || !poseName) {
-      alert("AI가 로드되지 않았거나 포즈 이름이 비었습니다.");
+      alert("AI is not loaded or pose name is empty.");
       return;
     }
     
     try {
-      setStatusText(`'${poseName}' 포즈 50번 학습 시작... 움직이지 마세요!`);
+      setStatusText(`Starting 50 training samples for '${poseName}' pose... Don't move!`);
       
       for (let i = 0; i < 50; i++) {
         const video = webcamRef.current.video;
@@ -224,7 +259,7 @@ export default function TrainAiPage() {
 
         } catch (err) {
           console.error(err);
-          setStatusText("백엔드 서버(Terminal 2)가 켜져있는지 확인하세요.");
+          setStatusText("Please check if the backend server (Terminal 2) is running.");
           return;
         }
         
@@ -234,177 +269,496 @@ export default function TrainAiPage() {
       const response = await axios.get(`${API_URL}/api/pose-counts`);
       setPoseCounts(response.data);
       
-      setStatusText(`'${poseName}' 포즈 50번 학습 완료!`);
+      setStatusText(`Completed 50 training samples for '${poseName}' pose!`);
       
     } catch (err) {
       console.error('학습 실패:', err);
-      setStatusText('학습 중 오류가 발생했습니다. 다시 시도해주세요.');
+      setStatusText('An error occurred during training. Please try again.');
     }
   };
 
   const handleTrainModel = async () => {
-    setStatusText("AI 뇌(Python)가 학습을 시작합니다... (몇 초 걸림)");
+    setStatusText("AI model (Python) is starting training... (takes a few seconds)");
     try {
       const response = await axios.post(`${API_URL}/api/train-model`);
       setStatusText(response.data.message);
-      alert("AI 뇌(모델)가 성공적으로 학습되었습니다!");
+      setPoseCounts({}); // 포즈별 학습 횟수 초기화
+      alert("AI model has been successfully trained!");
     } catch (err) {
       console.error(err);
-      setStatusText(err.response?.data?.detail || "모델 학습 실패");
+      setStatusText(err.response?.data?.detail || "Model training failed");
     }
   };
 
   const handleResetAll = async () => {
-    const confirmed = window.confirm(
-      "⚠️ 경고: 모든 학습 데이터와 모델이 삭제됩니다!\n\n" +
-      "이 작업은 되돌릴 수 없습니다. 정말 삭제하시겠습니까?"
+    // 첫 번째 경고창
+    const firstConfirm = window.confirm(
+      "⚠️ Warning: All training data and models will be deleted!"
     );
     
-    if (!confirmed) return;
+    if (!firstConfirm) return;
+    
+    // 두 번째 확인창
+    const secondConfirm = window.confirm(
+      "Are you sure you want to delete all data?\n\n" +
+      "This action cannot be undone. All training data and models will be permanently deleted."
+    );
+    
+    if (!secondConfirm) return;
     
     try {
-      setStatusText("전체 데이터 삭제 중...");
+      setStatusText("Deleting all data...");
       const response = await axios.delete(`${API_URL}/api/reset-all`);
       setPoseCounts({}); // UI 상태 초기화
-      setStatusText(response.data.message || "전체 데이터 삭제 완료!");
-      alert("✅ " + (response.data.message || "전체 데이터가 삭제되었습니다."));
+      setStatusText(response.data.message || "All data deleted!");
+      alert("✅ " + (response.data.message || "All data has been deleted."));
     } catch (err) {
       console.error(err);
-      setStatusText(err.response?.data?.detail || "데이터 삭제 실패");
-      alert("❌ 삭제 중 오류가 발생했습니다: " + (err.response?.data?.detail || err.message));
+      setStatusText(err.response?.data?.detail || "Data deletion failed");
+      alert("❌ An error occurred during deletion: " + (err.response?.data?.detail || err.message));
     }
   };
 
   return (
-    <div style={{ display: "flex", gap: "40px", justifyContent: "center", padding: "20px", flexWrap: "wrap" }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: videoWidth }}>
-        <h1>AI 포즈 챌린지 - 학습 페이지</h1>
-        <p>{statusText}</p>
-
-        <div style={{ position: "relative", width: videoWidth, height: videoHeight, borderRadius: "10px", overflow: "hidden" }}>
-          <Webcam
-            ref={webcamRef}
-            mirrored={true}
-            style={{ 
-              position: "absolute", 
-              top: 0,
-              left: 0,
-              zIndex: 9, 
-              width: "100%", 
-              height: "100%",
-              objectFit: "cover"
+    <div 
+      className="train-ai-page" 
+      style={{ 
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        position: 'relative',
+        paddingBottom: '40px',
+        transform: 'scale(0.8)',
+        transformOrigin: 'center 5%'
+      }}
+    >
+      {/* 배경 이미지 (중앙 배치) */}
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '1200px',
+          height: '1500px'
+        }}
+      >
+        <img
+          src="/takepicture_1_2_background.svg"
+          alt="Background"
+          style={{
+            position: 'absolute',
+            width: '1200px',
+            height: '1500px',
+            objectFit: 'contain',
+            zIndex: 1
+          }}
+        />
+        {/* 카메라 컨테이너 */}
+        <div
+          style={{
+            position: 'absolute',
+            width: '640px',
+            height: '480px',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%) translateY(-230px)',
+            zIndex: 5
+          }}
+        >
+          {/* 카메라 박스 배경 */}
+          <img
+            src={cameraBox}
+            alt="Camera Box"
+            style={{
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              zIndex: 1
             }}
-            videoConstraints={videoConstraints}
           />
-          <canvas
-            ref={canvasRef}
-            style={{ 
-              position: "absolute", 
-              top: 0,
-              left: 0,
-              zIndex: 10, 
-              width: "100%", 
-              height: "100%" 
+          {/* 웹캠 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 2,
+              width: '640px',
+              height: '480px',
+              overflow: 'hidden',
+              borderRadius: '10px'
             }}
-          />
+          >
+            <Webcam
+              ref={webcamRef}
+              audio={false}
+              videoConstraints={videoConstraints}
+              screenshotFormat="image/jpeg"
+              mirrored={true}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                borderRadius: '5px'
+              }}
+            />
+            <canvas
+              ref={canvasRef}
+              style={{ 
+                position: "absolute", 
+                top: 0,
+                left: 0,
+                zIndex: 10, 
+                width: "100%", 
+                height: "100%" 
+              }}
+            />
+          </div>
         </div>
         
-        <button onClick={() => navigate('/')} style={{ width: videoWidth, marginTop: "20px", backgroundColor: "#555", color: "#f5f5f5", borderRadius: "5px", padding: "10px" }}>
-          홈으로 돌아가기
-        </button>
-      </div>
-      
-      <div style={{ width: "300px", paddingTop: "60px" }}>
-        <div style={{ backgroundColor: "#f0f0f0", padding: "20px", borderRadius: "10px" }}>
-          <h3>1. 학습할 포즈 선택</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
+        {/* 상태 텍스트 (NormalModePage의 1/4 위치와 동일) */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 10,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <p className="webcam-status" style={{ position: 'absolute', top: 'calc(50% + 20px)', left: '50%', transform: 'translateX(-50%)', zIndex: 10, fontSize: '1rem', color: '#1a1a1a', fontWeight: 'bold' }}>
+            {statusText}
+          </p>
+        </div>
+        
+        {/* 박스 2개 (카메라와 상태 텍스트 아래) */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(50% + 70px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            gap: '30px',
+            zIndex: 10
+          }}
+        >
+          {/* 왼쪽 박스 - 포즈 버튼들 */}
+          <div
+            style={{
+              width: '310px',
+              height: '150px',
+              border: '0px solid #A8A8A8',
+              backgroundColor: 'transparent',
+              borderRadius: '10px',
+              display: 'flex',
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              columnGap: '2px',
+              rowGap: '0px',
+              padding: '5px 10px',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}
+          >
             {AVAILABLE_POSES.map((pose) => (
               <button
                 key={pose}
-                onClick={() => setPoseName(pose)}
+                onClick={() => {
+                  setPoseName(pose);
+                  if (detector) {
+                    setStatusText(`"${pose}" pose training ready`);
+                  }
+                }}
                 style={{
-                  width: '100%',
-                  padding: "12px 24px",
-                  fontSize: "1.1rem",
-                  color: poseName === pose ? "#f5f5f5" : "#333",
-                  backgroundColor: poseName === pose ? "#007AFF" : "#e0e0e0",
-                  border: poseName === pose ? "2px solid #007AFF" : "2px solid #ccc",
-                  borderRadius: "10px",
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  padding: 0,
                   cursor: 'pointer',
-                  transition: "all 0.2s",
-                  fontWeight: poseName === pose ? "bold" : "normal"
+                  opacity: poseName === pose ? 1 : 0.6,
+                  transition: 'opacity 0.2s',
+                  flex: '0 0 calc(50% - 1px)'
                 }}
               >
-                {pose}
+                <img
+                  src={POSE_BUTTON_MAP[pose]}
+                  alt={pose}
+                  style={{
+                    display: 'block',
+                    height: '50px',
+                    width: 'auto'
+                  }}
+                />
               </button>
             ))}
           </div>
-          
-          <button 
-            onClick={handleLearnPose}
-            style={{ width: '100%', padding: "12px 24px", fontSize: "1.1rem", color: "#f5f5f5", backgroundColor: "#007AFF", border: "none", borderRadius: "10px", cursor: 'pointer', marginTop: '20px' }}
-          >
-            " {poseName} " 포즈 50번 학습
-          </button>
-          
-          <h3 style={{marginTop: '30px'}}>2. (필수) 모델 학습시키기</h3>
-          <button 
-            onClick={handleTrainModel}
-            style={{ width: '100%', padding: "12px 24px", fontSize: "1.1rem", color: "#f5f5f5", backgroundColor: "#34C759", border: "none", borderRadius: "10px", cursor: 'pointer' }}
-          >
-            AI 뇌(Python) 학습 시작!
-          </button>
-        </div>
-        
-        <div style={{ backgroundColor: "#f0f0f0", padding: "20px", borderRadius: "10px", marginTop: '20px' }}>
-            <h3>현재 학습된 포즈 횟수:</h3>
-            <ul style={{ listStyleType: 'none', padding: 0 }}>
-                {Object.entries(poseCounts).length > 0 ? (
-                  Object.entries(poseCounts).map(([label, count]) => (
-                    <li key={label} style={{ fontSize: '1.1rem' }}>
-                        {label}: <strong>{count}</strong> 장
-                    </li>
-                  ))
-                ) : (
-                  <li style={{ fontSize: '1rem', color: '#666' }}>학습된 데이터가 없습니다.</li>
-                )}
-            </ul>
-        </div>
-
-        <div style={{ backgroundColor: "#fff3cd", padding: "20px", borderRadius: "10px", marginTop: '20px', border: "2px solid #ffc107" }}>
-          <h3 style={{ color: '#856404', marginTop: 0 }}>⚠️ 위험한 작업</h3>
-          <button 
-            onClick={handleResetAll}
-            style={{ 
-              width: '100%', 
-              padding: "12px 24px", 
-              fontSize: "1rem", 
-              color: "#fff", 
-              backgroundColor: "#dc3545", 
-              border: "none", 
-              borderRadius: "10px", 
-              cursor: 'pointer',
-              fontWeight: 'bold'
+          {/* 오른쪽 박스 - Train, Start Training 버튼 */}
+          <div
+            style={{
+              width: '310px',
+              height: '150px',
+              border: '0px solid #A8A8A8',
+              backgroundColor: 'transparent',
+              borderRadius: '10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              padding: '10px',
+              justifyContent: 'center',
+              alignItems: 'center'
             }}
           >
-            전체 데이터 삭제
-          </button>
-          <p style={{ fontSize: '0.9rem', color: '#856404', marginTop: '10px', marginBottom: 0 }}>
-            모든 학습 데이터와 모델을 삭제합니다. 되돌릴 수 없습니다!
-          </p>
+            <button
+              onClick={handleLearnPose}
+              style={{
+                border: 'none',
+                backgroundColor: 'transparent',
+                padding: 0,
+                cursor: 'pointer'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.filter = 'grayscale(100%)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.filter = 'grayscale(0%)';
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.transform = 'scale(0.95)';
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }}
+            >
+              <img
+                src={trainButton}
+                alt="Train"
+                style={{
+                  display: 'block',
+                  height: '50px',
+                  width: 'auto'
+                }}
+              />
+            </button>
+            
+            <button
+              onClick={handleTrainModel}
+              style={{
+                border: 'none',
+                backgroundColor: 'transparent',
+                padding: 0,
+                cursor: 'pointer'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.filter = 'grayscale(100%)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.filter = 'grayscale(0%)';
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.transform = 'scale(0.95)';
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }}
+            >
+              <img
+                src={startAitrainButton}
+                alt="Start AI Model Training"
+                style={{
+                  display: 'block',
+                  height: '50px',
+                  width: 'auto'
+                }}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      {/* traincount_box (독립 개체) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 'calc(50% + 170px)',
+          left: '50%',
+          transform: 'translateX(-50%) scale(1.1)',
+          transformOrigin: 'center center',
+          zIndex: 10
+        }}
+      >
+        <div style={{ position: 'relative' }}>
+          <img
+            src={traincountBox}
+            alt="Train Count Box"
+            style={{
+              display: 'block',
+              width: '700px',
+              height: 'auto'
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: '10px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '100%',
+              padding: '10px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'flex-start'
+            }}
+          >
+            <div style={{ fontSize: '1rem', color: '#1a1a1a', fontWeight: 'bold', marginBottom: '10px' }}>
+              Current Training Count:
+            </div>
+            <div style={{ fontSize: '1rem', color: '#1a1a1a', textAlign: 'center' }}>
+              {Object.keys(poseCounts).length === 0 ? (
+                <div>No poses trained yet</div>
+              ) : (
+                Object.entries(poseCounts).map(([pose, count]) => (
+                  <div key={pose} style={{ marginBottom: '5px' }}>
+                    {pose}: {count} times
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Delete All Data 버튼 (traincount_box 아래) */}
       <div
         style={{
-          position: 'fixed',
-          bottom: '20px',
+          position: 'absolute',
+          top: 'calc(50% + 400px)',
           left: '50%',
-          transform: 'translateX(-50%)',
+          transform: 'translateX(-50%) scale(1.1)',
+          transformOrigin: 'center center',
+          zIndex: 10
+        }}
+      >
+        <button
+          onClick={handleResetAll}
+          style={{
+            border: 'none',
+            backgroundColor: 'transparent',
+            padding: 0,
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)';
+            e.currentTarget.style.filter = 'grayscale(100%)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.filter = 'grayscale(0%)';
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.transform = 'scale(0.95)';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)';
+          }}
+        >
+          <img
+            src={deleteButton}
+            alt="Delete All Data"
+            style={{
+              display: 'block',
+              width: 'auto',
+              height: '50px'
+            }}
+          />
+        </button>
+      </div>
+
+      {/* 경고 문구 (delete all data 버튼 아래) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 'calc(50% + 460px)',
+          left: '50%',
+          transform: 'translateX(-50%) scale(1.1)',
+          transformOrigin: 'center center',
+          zIndex: 10,
+          textAlign: 'center',
+          fontSize: '0.9rem',
+          color: '#1a1a1a',
+          fontWeight: 100,
+          fontFamily: 'Pretendard, sans-serif'
+        }}
+      >
+        ⚠️ Warning: All training data and models will be deleted!
+      </div>
+
+      {/* Go to Home 버튼 (delete all data 버튼 아래) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 'calc(50% + 540px)',
+          left: '50%',
+          transform: 'translateX(-50%) scale(1.1)',
+          transformOrigin: 'center center',
+          zIndex: 10
+        }}
+      >
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            border: 'none',
+            backgroundColor: 'transparent',
+            padding: 0,
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)';
+            e.currentTarget.style.filter = 'grayscale(100%)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.filter = 'grayscale(0%)';
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.transform = 'scale(0.95)';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)';
+          }}
+        >
+          <img
+            src={gotoHomeButton}
+            alt="Go to Home"
+            style={{
+              display: 'block',
+              width: 'auto',
+              height: '50px'
+            }}
+          />
+        </button>
+      </div>
+
+      {/* 저작권 문구 */}
+      <div
+        style={{
+          marginTop: '60px',
           textAlign: 'center',
           color: 'rgba(245, 245, 245, 0.8)',
-          fontSize: '0.9rem',
-          zIndex: 1000
+          fontSize: '0.9rem'
         }}
       >
         <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>

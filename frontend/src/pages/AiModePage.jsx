@@ -315,7 +315,7 @@ export default function AiModePage() {
               >
                 <h2
                   className="countdown-text"
-                  style={{ fontSize: '4rem', color: '#f5f5f5' }}
+                  style={{ fontSize: '4rem', color: '#f5f5f5', fontWeight: 'bold' }}
                 >
                   {countdown}
                 </h2>
@@ -338,9 +338,10 @@ export default function AiModePage() {
                 <h2
                   className="webcam-status"
                   style={{
-                    fontSize: '2rem',
+                    fontSize: '1rem',
                     color: '#f5f5f5',
-                    textShadow: '0 0 10px black',
+                    textShadow: '0 0 10px #1a1a1a',
+                    fontWeight: 'bold'
                   }}
                 >
                   {statusText}
@@ -365,9 +366,10 @@ export default function AiModePage() {
                 <h2
                   className="webcam-status"
                   style={{
-                    fontSize: '2rem',
+                    fontSize: '1rem',
                     color: '#f5f5f5',
-                    textShadow: '0 0 10px black',
+                    textShadow: '0 0 10px #1a1a1a',
+                    fontWeight: 'bold'
                   }}
                 >
                   Capture Complete
@@ -411,7 +413,7 @@ export default function AiModePage() {
             alignItems: 'center'
           }}
         >
-        <p className="webcam-status" style={{ position: 'absolute', top: 'calc(50% + 20px)', left: '50%', transform: 'translateX(-50%)', zIndex: 10, fontSize: '2rem', color: 'black' }}>
+        <p className="webcam-status" style={{ position: 'absolute', top: 'calc(50% + 20px)', left: '50%', transform: 'translateX(-50%)', zIndex: 10, fontSize: '1rem', color: '#1a1a1a', fontWeight: 'bold' }}>
           {isCompleted
             ? "Capture Complete"
             : `${capturedPhotos.length} / 4`}

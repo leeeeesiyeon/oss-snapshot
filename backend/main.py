@@ -150,16 +150,28 @@ def delete_pose(pose_name: str):
 # --- API 6: "전체 데이터 삭제" ---
 @app.delete("/api/reset-all")
 def reset_all_data():
-    """모든 학습 데이터와 모델 삭제"""
+    """모든 학습 데이터와 모델 삭제 (이전에 했던 모든 학습들 포함)"""
     total_count = sum(len(data) for data in pose_data_db.values())
+    
+    # 모든 포즈 데이터 삭제
     pose_data_db.clear()
     
-    # 모델 파일도 삭제
+    # 모델 파일도 삭제 (혹시 다른 이름으로 저장된 파일도 확인)
     if os.path.exists(MODEL_FILE_NAME):
         os.remove(MODEL_FILE_NAME)
     
-    print(f"전체 데이터 {total_count}개 삭제 완료")
-    return {"message": f"전체 데이터 {total_count}개 삭제 완료."}
+    # 혹시 다른 위치에 저장된 모델 파일도 삭제
+    model_variants = ["model.pkl", "pose_model.pkl", "trained_model.pkl"]
+    for variant in model_variants:
+        if os.path.exists(variant):
+            os.remove(variant)
+    
+    # 분류기도 초기화
+    global classifier
+    classifier = KNeighborsClassifier(n_neighbors=3)
+    
+    print(f"전체 데이터 {total_count}개 삭제 완료 (모든 학습 데이터 및 모델 파일 삭제됨)")
+    return {"message": f"전체 데이터 {total_count}개 삭제 완료. 모든 학습 데이터와 모델이 삭제되었습니다."}
 
 # 상단에 상수 추가
 AVAILABLE_POSES = ["Wink", "V sign", "Close up", "Surprise", "배경"]
