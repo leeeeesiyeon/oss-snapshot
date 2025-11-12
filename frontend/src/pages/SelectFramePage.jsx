@@ -8,6 +8,10 @@ import whiteButton from '../assets/images/selectframe_white_button.svg';
 import blackButton from '../assets/images/selectframe_black_button.svg';
 import redButton from '../assets/images/selectframe_red_button.svg';
 import printButton from '../assets/images/print_button.svg';
+import noneFilterButton from '../assets/images/none_filter_button.svg';
+import mutedButton from '../assets/images/muted_button.svg';
+import brightButton from '../assets/images/bright_button.svg';
+import grayscaleButton from '../assets/images/grayscale_button.svg';
 
 // 프레임 선택 페이지
 export default function SelectFramePage() {
@@ -15,6 +19,7 @@ export default function SelectFramePage() {
   const location = useLocation();
   const photos = location.state?.photos || [];
   const [selectedFrame, setSelectedFrame] = useState('white');
+  const [selectedFilter, setSelectedFilter] = useState('none');
 
   // 프레임 이미지
   const frameImages = {
@@ -27,16 +32,39 @@ export default function SelectFramePage() {
     setSelectedFrame(frameType);
   };
 
+  const handleFilterSelect = (filterType) => {
+    setSelectedFilter(filterType);
+  };
+
+  // 필터 CSS 스타일 생성
+  const getFilterStyle = (filterType) => {
+    switch (filterType) {
+      case 'grayscale':
+        // 흑백 100%, 밝기 +30, 대비 -20
+        return { filter: 'grayscale(100%) brightness(1.3) contrast(0.8)' };
+      case '6s':
+        // 노이즈 10, 흑백 10, 밝기 -10, 대비 -20, 채도 -10
+        // CSS로는 노이즈를 직접 적용할 수 없으므로 다른 효과로 대체
+        return { filter: 'grayscale(10%) brightness(0.9) contrast(0.8) saturate(0.9)' };
+      case 'bright':
+        // 밝기 10, 채도 10, 대비 -20
+        return { filter: 'brightness(1.1) saturate(1.1) contrast(0.8)' };
+      default:
+        return { filter: 'none' };
+    }
+  };
+
   const handleConfirm = () => {
     if (photos.length === 0) {
       alert('No photos available');
       return;
     }
-    // 프레임과 사진 정보를 함께 전달
+    // 프레임, 필터, 사진 정보를 함께 전달
     navigate('/print', { 
       state: { 
         photos: photos,
-        frame: selectedFrame 
+        frame: selectedFrame,
+        filter: selectedFilter
       } 
     });
   };
@@ -190,26 +218,163 @@ export default function SelectFramePage() {
         </button>
         </div>
 
+      {/* 필터 선택 버튼들 - 프레임 선택 버튼과 프레임 사이에 가로 배치 (독립 개체) */}
+      {/* None 버튼 */}
+      <div style={{ 
+        position: 'absolute',
+        top: '300px',
+        left: 'calc(50% - 247.5px)',
+        transform: 'translateX(-50%)',
+        zIndex: 10
+      }}>
+        <button 
+          onClick={() => handleFilterSelect('none')}
+          style={{
+            border: 'none',
+            cursor: 'pointer',
+            backgroundColor: 'transparent',
+            padding: 0,
+            display: 'inline-block',
+            opacity: selectedFilter !== 'none' ? 0.5 : 1
+          }}
+        >
+          <img 
+            src={noneFilterButton} 
+            alt="None Filter" 
+            style={{ 
+              display: 'block',
+              width: '150px',
+              height: 'auto',
+              objectFit: 'contain',
+              maxWidth: 'none',
+              minWidth: '150px'
+            }} 
+          />
+        </button>
+      </div>
+      
+      {/* Grayscale 버튼 */}
+      <div style={{ 
+        position: 'absolute',
+        top: '300px',
+        left: 'calc(50% - 82.5px)',
+        transform: 'translateX(-50%)',
+        zIndex: 10
+      }}>
+        <button 
+          onClick={() => handleFilterSelect('grayscale')}
+          style={{
+            border: 'none',
+            cursor: 'pointer',
+            backgroundColor: 'transparent',
+            padding: 0,
+            display: 'inline-block',
+            opacity: selectedFilter !== 'grayscale' ? 0.5 : 1
+          }}
+        >
+          <img 
+            src={grayscaleButton} 
+            alt="Grayscale Filter" 
+            style={{ 
+              display: 'block',
+              width: '150px',
+              height: 'auto',
+              objectFit: 'contain',
+              maxWidth: 'none',
+              minWidth: '150px'
+            }} 
+          />
+        </button>
+      </div>
+      
+      {/* 흐리게 버튼 */}
+      <div style={{ 
+        position: 'absolute',
+        top: '300px',
+        left: 'calc(50% + 82.5px)',
+        transform: 'translateX(-50%)',
+        zIndex: 10
+      }}>
+        <button 
+          onClick={() => handleFilterSelect('6s')}
+          style={{
+            border: 'none',
+            cursor: 'pointer',
+            backgroundColor: 'transparent',
+            padding: 0,
+            display: 'inline-block',
+            opacity: selectedFilter !== '6s' ? 0.5 : 1
+          }}
+        >
+          <img 
+            src={mutedButton} 
+            alt="Muted Filter" 
+            style={{ 
+              display: 'block',
+              width: '150px',
+              height: 'auto',
+              objectFit: 'contain',
+              maxWidth: 'none',
+              minWidth: '150px'
+            }} 
+          />
+        </button>
+      </div>
+      
+      {/* Bright 버튼 */}
+      <div style={{ 
+        position: 'absolute',
+        top: '300px',
+        left: 'calc(50% + 247.5px)',
+        transform: 'translateX(-50%)',
+        zIndex: 10
+      }}>
+        <button 
+          onClick={() => handleFilterSelect('bright')}
+          style={{
+            border: 'none',
+            cursor: 'pointer',
+            backgroundColor: 'transparent',
+            padding: 0,
+            display: 'inline-block',
+            opacity: selectedFilter !== 'bright' ? 0.5 : 1
+          }}
+        >
+          <img 
+            src={brightButton} 
+            alt="Bright Filter" 
+            style={{ 
+              display: 'block',
+              width: '150px',
+              height: 'auto',
+              objectFit: 'contain',
+              maxWidth: 'none',
+              minWidth: '150px'
+            }} 
+          />
+        </button>
+      </div>
+
       {/* 선택된 프레임 미리보기 */}
       {selectedFrame && (
         <div style={{ 
           position: 'absolute',
-          top: '305px',
+          top: '515px',
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 10,
           display: 'inline-block',
-          width: '714px',
-          height: '1071px'
+          width: '571.2px',  // 714px * 0.8
+          height: '856.8px'  // 1071px * 0.8
         }}>
         {/* 사진들을 프레임 아래에 배치 */}
         <div style={{
           position: 'absolute',
-          top: '34px',
+          top: '25.6px',  // 32px * 0.8
           left: '50%',
           transform: 'translateX(-50%)',
-          width: '320px',
-          height: '1024px',
+          width: '256px',  // 320px * 0.8
+          height: '819.2px',  // 1024px * 0.8
           display: 'grid',
           gridTemplateColumns: '1fr',
           gap: '0px',
@@ -221,21 +386,23 @@ export default function SelectFramePage() {
               src={photo} 
               alt={`Photo ${index + 1}`}
               style={{
-                width: '320px',
-                height: '256px',
+                width: '256px',  // 320px * 0.8
+                height: '204.8px',  // 256px * 0.8
                 objectFit: 'cover',
-                borderRadius: '4px'
+                borderRadius: '4px',
+                ...getFilterStyle(selectedFilter)
               }}
             />
           ))}
         </div>
+        
           {/* 프레임 이미지 (사진 위에 배치) */}
           <img 
             src={frameImages[selectedFrame]} 
             alt={`${selectedFrame} frame`}
             style={{ 
-              width: '714px',
-              height: '1071px',
+              width: '571.2px',  // 714px * 0.8
+              height: '856.8px',  // 1071px * 0.8
               objectFit: 'contain',
               position: 'relative',
               zIndex: 2,
