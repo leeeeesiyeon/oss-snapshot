@@ -20,6 +20,10 @@ export default function SelectFramePage() {
   const photos = location.state?.photos || [];
   const [selectedFrame, setSelectedFrame] = useState('white');
   const [selectedFilter, setSelectedFilter] = useState('none');
+  const [aiRetouch, setAiRetouch] = useState(false); // AI 보정 On/Off
+  const [retouchedPhotos, setRetouchedPhotos] = useState([]); // 보정된 사진들
+  const [isProcessing, setIsProcessing] = useState(false); // 처리 중 상태
+  const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 }); // 진행률
 
   // 프레임 이미지
   const frameImages = {
@@ -54,17 +58,218 @@ export default function SelectFramePage() {
     }
   };
 
+  // AI 보정 적용 함수
+  const handleRetouch = async () => {
+    if (!aiRetouch) {
+      // 보정 시작
+      setIsProcessing(true);
+      setProcessingProgress({ current: 0, total: photos.length });
+      
+      try {
+        const enhancedPhotos = [];
+        
+        // 각 사진에 대해 보정 적용
+        for (let i = 0; i < photos.length; i++) {
+          const photo = photos[i];
+          setProcessingProgress({ current: i + 1, total: photos.length });
+          
+          // Rate limit 방지를 위해 각 요청 사이에 딜레이 추가 (5초)
+          // 무료 티어: 분당 6회 요청 제한
+          if (i > 0) {
+            console.log(`Rate limit 방지를 위해 ${5}초 대기 중...`);
+            await new Promise(resolve => setTimeout(resolve, 5000)); // 5초 대기
+          }
+          
+          try {
+            let blob;
+            
+            // Blob URL인지 Base64 데이터 URL인지 확인
+            if (photo.startsWith('blob:')) {
+              // Blob URL인 경우: Canvas를 통해 Blob으로 변환
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              
+              blob = await new Promise((resolve, reject) => {
+                img.onload = () => {
+                  try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    
+                    canvas.toBlob((blob) => {
+                      if (blob) {
+                        resolve(blob);
+                      } else {
+                        reject(new Error('Canvas to Blob 변환 실패'));
+                      }
+                    }, 'image/png');
+                  } catch (error) {
+                    reject(error);
+                  }
+                };
+                
+                img.onerror = () => {
+                  reject(new Error('이미지 로드 실패'));
+                };
+                
+                img.src = photo;
+              });
+            } else if (photo.startsWith('data:')) {
+              // Base64 데이터 URL인 경우: Base64를 Blob으로 변환
+              const response = await fetch(photo);
+              if (!response.ok) {
+                throw new Error(`이미지 로드 실패: ${response.statusText}`);
+              }
+              blob = await response.blob();
+            } else {
+              // 일반 URL인 경우
+              const response = await fetch(photo);
+              if (!response.ok) {
+                throw new Error(`이미지 로드 실패: ${response.statusText}`);
+              }
+              blob = await response.blob();
+            }
+            
+            // FormData 생성
+            const formData = new FormData();
+            formData.append('file', blob, `photo_${i}.png`);
+            
+            // 타임아웃 설정 (60초)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+            
+            // 백엔드 API 호출
+            const retouchResponse = await fetch('http://127.0.0.1:8000/api/retouch-upload', {
+              method: 'POST',
+              body: formData,
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!retouchResponse.ok) {
+              const errorData = await retouchResponse.json().catch(() => ({ detail: 'Unknown error' }));
+              throw new Error(errorData.detail || `서버 오류: ${retouchResponse.status}`);
+            }
+            
+            const data = await retouchResponse.json();
+            
+            if (!data.enhanced_image_url) {
+              throw new Error('보정된 이미지 URL을 받지 못했습니다.');
+            }
+            
+            enhancedPhotos.push(data.enhanced_image_url);
+            console.log(`사진 ${i + 1}/${photos.length} 보정 완료`);
+          } catch (error) {
+            if (error.name === 'AbortError') {
+              throw new Error(`사진 ${i + 1} 처리 시간 초과 (60초)`);
+            }
+            console.error(`사진 ${i + 1} 보정 오류:`, error);
+            
+            // Rate limit 오류(429)인 경우 재시도 로직
+            const errorMessage = error.message || '';
+            if (errorMessage.includes('429') || errorMessage.includes('throttled') || errorMessage.includes('rate limit')) {
+              console.log(`사진 ${i + 1} Rate limit 오류 감지. 15초 후 재시도...`);
+              await new Promise(resolve => setTimeout(resolve, 15000)); // 15초 대기
+              
+              try {
+                // 재시도
+                const retryBlob = await new Promise((resolve, reject) => {
+                  if (photo.startsWith('blob:')) {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = img.width;
+                      canvas.height = img.height;
+                      const ctx = canvas.getContext('2d');
+                      ctx.drawImage(img, 0, 0);
+                      canvas.toBlob((blob) => {
+                        if (blob) resolve(blob);
+                        else reject(new Error('Canvas to Blob 변환 실패'));
+                      }, 'image/png');
+                    };
+                    img.onerror = () => reject(new Error('이미지 로드 실패'));
+                    img.src = photo;
+                  } else if (photo.startsWith('data:')) {
+                    fetch(photo).then(r => r.blob()).then(resolve).catch(reject);
+                  } else {
+                    fetch(photo).then(r => r.blob()).then(resolve).catch(reject);
+                  }
+                });
+                
+                const retryFormData = new FormData();
+                retryFormData.append('file', retryBlob, `photo_${i}.png`);
+                
+                const retryController = new AbortController();
+                const retryTimeoutId = setTimeout(() => retryController.abort(), 60000);
+                
+                const retryResponse = await fetch('http://127.0.0.1:8000/api/retouch-upload', {
+                  method: 'POST',
+                  body: retryFormData,
+                  signal: retryController.signal,
+                });
+                
+                clearTimeout(retryTimeoutId);
+                
+                if (retryResponse.ok) {
+                  const retryData = await retryResponse.json();
+                  if (retryData.enhanced_image_url) {
+                    enhancedPhotos.push(retryData.enhanced_image_url);
+                    console.log(`사진 ${i + 1} 재시도 성공`);
+                    continue; // 다음 사진으로
+                  }
+                }
+              } catch (retryError) {
+                console.error(`사진 ${i + 1} 재시도 실패:`, retryError);
+              }
+            }
+            
+            // 재시도 실패 또는 다른 오류인 경우 원본 사용
+            enhancedPhotos.push(photo);
+            alert(`사진 ${i + 1} 보정 실패: ${error.message}\n원본 이미지를 사용합니다.`);
+          }
+        }
+        
+        setRetouchedPhotos(enhancedPhotos);
+        setAiRetouch(true);
+        setProcessingProgress({ current: 0, total: 0 });
+      } catch (error) {
+        console.error('Retouch error:', error);
+        alert('보정 처리 중 오류가 발생했습니다: ' + error.message);
+        setAiRetouch(false);
+        setRetouchedPhotos([]);
+        setProcessingProgress({ current: 0, total: 0 });
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      // 보정 해제
+      setAiRetouch(false);
+      setRetouchedPhotos([]);
+      setProcessingProgress({ current: 0, total: 0 });
+    }
+  };
+
+  // 표시할 사진 선택 (보정된 사진이 있으면 보정된 것, 없으면 원본)
+  const displayPhotos = aiRetouch && retouchedPhotos.length > 0 
+    ? retouchedPhotos 
+    : photos;
+
   const handleConfirm = () => {
     if (photos.length === 0) {
       alert('No photos available');
       return;
     }
-    // 프레임, 필터, 사진 정보를 함께 전달
+    // 프레임, 필터, 사진 정보를 함께 전달 (보정된 사진 또는 원본)
     navigate('/print', { 
       state: { 
-        photos: photos,
+        photos: displayPhotos, // 보정된 사진 또는 원본
         frame: selectedFrame,
-        filter: selectedFilter
+        filter: selectedFilter,
+        retouched: aiRetouch // 보정 여부 전달
       } 
     });
   };
@@ -355,6 +560,56 @@ export default function SelectFramePage() {
         </button>
       </div>
 
+      {/* AI 보정 버튼 */}
+      <div style={{ 
+        position: 'absolute',
+        top: '300px',
+        left: 'calc(50% + 330px)',
+        transform: 'translateX(-50%)',
+        zIndex: 10
+      }}>
+        <button 
+          onClick={handleRetouch}
+          disabled={isProcessing}
+          style={{
+            border: 'none',
+            cursor: isProcessing ? 'wait' : 'pointer',
+            backgroundColor: 'transparent',
+            padding: 0,
+            display: 'inline-block',
+            opacity: isProcessing ? 0.5 : (aiRetouch ? 1 : 0.5)
+          }}
+        >
+          <div style={{
+            width: '150px',
+            height: '60px',
+            backgroundColor: aiRetouch ? '#4CAF50' : '#f0f0f0',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: aiRetouch ? 'white' : '#333',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            boxShadow: aiRetouch ? '0 2px 8px rgba(76, 175, 80, 0.3)' : '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            {isProcessing ? (
+              <>
+                <div>처리 중...</div>
+                {processingProgress.total > 0 && (
+                  <div style={{ fontSize: '10px', marginTop: '4px' }}>
+                    {processingProgress.current}/{processingProgress.total}
+                  </div>
+                )}
+              </>
+            ) : (
+              aiRetouch ? 'AI 보정 ON' : 'AI 보정 OFF'
+            )}
+          </div>
+        </button>
+        </div>
+
       {/* 선택된 프레임 미리보기 */}
       {selectedFrame && (
         <div style={{ 
@@ -380,7 +635,7 @@ export default function SelectFramePage() {
           gap: '0px',
           zIndex: 1
         }}>
-          {photos.slice(0, 4).map((photo, index) => (
+          {displayPhotos.slice(0, 4).map((photo, index) => (
             <img 
               key={index}
               src={photo} 

@@ -153,87 +153,87 @@ export default function TrainAiPage() {
         ctx.moveTo(flipX(x1), y1);
         ctx.lineTo(flipX(x2), y2);
         ctx.stroke();
-      }
+    }
     };
     
     // Body keypoints 그리기 (빨간색)
     if (result.body && result.body.length > 0) {
-      const body = result.body[0];
-      let keypoints = [];
-      
-      if (Array.isArray(body.keypoints) && body.keypoints.length > 0) {
-        keypoints = body.keypoints;
-      } else if (Array.isArray(body.pose) && body.pose.length > 0) {
-        keypoints = body.pose;
-      } else if (body.keypoints && typeof body.keypoints === 'object') {
-        keypoints = Object.values(body.keypoints);
-      } else {
-        for (const key in body) {
-          if (Array.isArray(body[key]) && body[key].length > 0) {
-            const firstItem = body[key][0];
-            if (firstItem && (firstItem.x !== undefined || firstItem[0] !== undefined)) {
-              keypoints = body[key];
-              break;
-            }
+    const body = result.body[0];
+    let keypoints = [];
+    
+    if (Array.isArray(body.keypoints) && body.keypoints.length > 0) {
+      keypoints = body.keypoints;
+    } else if (Array.isArray(body.pose) && body.pose.length > 0) {
+      keypoints = body.pose;
+    } else if (body.keypoints && typeof body.keypoints === 'object') {
+      keypoints = Object.values(body.keypoints);
+    } else {
+      for (const key in body) {
+        if (Array.isArray(body[key]) && body[key].length > 0) {
+          const firstItem = body[key][0];
+          if (firstItem && (firstItem.x !== undefined || firstItem[0] !== undefined)) {
+            keypoints = body[key];
+            break;
           }
         }
       }
-      
+    }
+    
       ctx.strokeStyle = "rgba(189, 30, 20, 0.6)";
-      ctx.lineWidth = 2;
-      
-      const keypointsByPart = {};
-      for (let i = 0; i < keypoints.length; i++) {
-        if (keypoints[i].part) {
-          keypointsByPart[keypoints[i].part] = keypoints[i];
-        }
+    ctx.lineWidth = 2;
+    
+    const keypointsByPart = {};
+    for (let i = 0; i < keypoints.length; i++) {
+      if (keypoints[i].part) {
+        keypointsByPart[keypoints[i].part] = keypoints[i];
       }
-      const partConnections = [
-        ['nose', 'leftEye'], ['nose', 'rightEye'],
-        ['leftEye', 'leftEar'], ['rightEye', 'rightEar'],
-        ['leftShoulder', 'rightShoulder'],
-        ['leftShoulder', 'leftElbow'], ['leftElbow', 'leftWrist'],
-        ['rightShoulder', 'rightElbow'], ['rightElbow', 'rightWrist'],
-        ['leftShoulder', 'leftHip'], ['rightShoulder', 'rightHip'],
-        ['leftHip', 'rightHip'],
-        ['leftHip', 'leftKnee'], ['leftKnee', 'leftAnkle'],
-        ['rightHip', 'rightKnee'], ['rightKnee', 'rightAnkle'],
-      ];
-      
-      for (const [part1, part2] of partConnections) {
-        const kp1 = keypointsByPart[part1];
-        const kp2 = keypointsByPart[part2];
-        if (kp1 && kp2) {
-          const coords1 = getKeypointCoords(kp1);
-          const coords2 = getKeypointCoords(kp2);
-          if (coords1 && coords2 && coords1.score > 0.1 && coords2.score > 0.1) {
+    }
+    const partConnections = [
+      ['nose', 'leftEye'], ['nose', 'rightEye'],
+      ['leftEye', 'leftEar'], ['rightEye', 'rightEar'],
+      ['leftShoulder', 'rightShoulder'],
+      ['leftShoulder', 'leftElbow'], ['leftElbow', 'leftWrist'],
+      ['rightShoulder', 'rightElbow'], ['rightElbow', 'rightWrist'],
+      ['leftShoulder', 'leftHip'], ['rightShoulder', 'rightHip'],
+      ['leftHip', 'rightHip'],
+      ['leftHip', 'leftKnee'], ['leftKnee', 'leftAnkle'],
+      ['rightHip', 'rightKnee'], ['rightKnee', 'rightAnkle'],
+    ];
+    
+    for (const [part1, part2] of partConnections) {
+      const kp1 = keypointsByPart[part1];
+      const kp2 = keypointsByPart[part2];
+      if (kp1 && kp2) {
+        const coords1 = getKeypointCoords(kp1);
+        const coords2 = getKeypointCoords(kp2);
+        if (coords1 && coords2 && coords1.score > 0.1 && coords2.score > 0.1) {
             drawLine(coords1.x, coords1.y, coords2.x, coords2.y, "rgba(189, 30, 20, 0.6)", 2);
-          }
         }
       }
+    }
+    
+    for (let i = 0; i < keypoints.length; i++) {
+      const kp = keypoints[i];
+      if (!kp) continue;
       
-      for (let i = 0; i < keypoints.length; i++) {
-        const kp = keypoints[i];
-        if (!kp) continue;
-        
-        let x = null, y = null;
-        if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
-          x = kp.position[0];
-          y = kp.position[1];
-        } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
-          x = kp.positionRaw[0];
-          y = kp.positionRaw[1];
-        } else if (kp.x !== undefined && kp.y !== undefined) {
-          x = kp.x;
-          y = kp.y;
-        } else if (Array.isArray(kp) && kp.length >= 2) {
-          x = kp[0];
-          y = kp[1];
-        }
-        
-        const score = kp.score || kp.confidence || 1;
-        
-        if (x !== null && y !== null && x > 0 && y > 0 && score > 0.1) {
+      let x = null, y = null;
+      if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+        x = kp.position[0];
+        y = kp.position[1];
+      } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+        x = kp.positionRaw[0];
+        y = kp.positionRaw[1];
+      } else if (kp.x !== undefined && kp.y !== undefined) {
+        x = kp.x;
+        y = kp.y;
+      } else if (Array.isArray(kp) && kp.length >= 2) {
+        x = kp[0];
+        y = kp[1];
+      }
+      
+      const score = kp.score || kp.confidence || 1;
+      
+      if (x !== null && y !== null && x > 0 && y > 0 && score > 0.1) {
           drawKeypoint(x, y, "rgba(189, 30, 20, 0.7)", 5);
         }
       }
@@ -375,9 +375,9 @@ export default function TrainAiPage() {
       }
       
       try {
-        const video = webcamRef.current.video;
-        const result = await detector.detect(video);
-        drawKeypoints(result);
+      const video = webcamRef.current.video;
+      const result = await detector.detect(video);
+      drawKeypoints(result);
       } catch (err) {
         console.error('Detection error:', err);
       }
@@ -604,8 +604,8 @@ export default function TrainAiPage() {
       
       // 최종적으로 서버에서 전체 카운트 가져오기
       try {
-        const response = await axios.get(`${API_URL}/api/pose-counts`);
-        setPoseCounts(response.data);
+      const response = await axios.get(`${API_URL}/api/pose-counts`);
+      setPoseCounts(response.data);
       } catch (err) {
         console.error('Failed to fetch pose counts:', err);
       }
@@ -735,7 +735,7 @@ export default function TrainAiPage() {
           <img
             src={cameraBox}
             alt="Camera Box"
-            style={{
+            style={{ 
               position: 'absolute',
               width: '100%',
               height: '100%',
@@ -760,7 +760,7 @@ export default function TrainAiPage() {
             <Webcam
               ref={webcamRef}
               audio={false}
-              videoConstraints={videoConstraints}
+            videoConstraints={videoConstraints}
               screenshotFormat="image/jpeg"
               mirrored={true}
               style={{
@@ -769,18 +769,18 @@ export default function TrainAiPage() {
                 objectFit: 'cover',
                 borderRadius: '5px'
               }}
-            />
-            <canvas
-              ref={canvasRef}
-              style={{ 
-                position: "absolute", 
-                top: 0,
-                left: 0,
-                zIndex: 10, 
-                width: "100%", 
-                height: "100%" 
-              }}
-            />
+          />
+          <canvas
+            ref={canvasRef}
+            style={{ 
+              position: "absolute", 
+              top: 0,
+              left: 0,
+              zIndex: 10, 
+              width: "100%", 
+              height: "100%" 
+            }}
+          />
           </div>
         </div>
         
@@ -800,8 +800,8 @@ export default function TrainAiPage() {
           <p className="webcam-status" style={{ position: 'absolute', top: 'calc(50% + 20px)', left: '50%', transform: 'translateX(-50%)', zIndex: 10, fontSize: '1rem', color: '#1a1a1a', fontWeight: 'bold' }}>
             {statusText}
           </p>
-        </div>
-        
+      </div>
+      
         {/* 박스 2개 (카메라와 상태 텍스트 아래) */}
         <div
           style={{
@@ -879,8 +879,8 @@ export default function TrainAiPage() {
               alignItems: 'center'
             }}
           >
-            <button
-              onClick={handleLearnPose}
+          <button 
+            onClick={handleLearnPose}
               style={{
                 border: 'none',
                 backgroundColor: 'transparent',
@@ -901,7 +901,7 @@ export default function TrainAiPage() {
               onMouseUp={(e) => {
                 e.currentTarget.style.transform = 'scale(1.05)';
               }}
-            >
+          >
               <img
                 src={trainButton}
                 alt="Train"
@@ -911,10 +911,10 @@ export default function TrainAiPage() {
                   width: 'auto'
                 }}
               />
-            </button>
-            
-            <button
-              onClick={handleTrainModel}
+          </button>
+          
+          <button 
+            onClick={handleTrainModel}
               style={{
                 border: 'none',
                 backgroundColor: 'transparent',
@@ -935,7 +935,7 @@ export default function TrainAiPage() {
               onMouseUp={(e) => {
                 e.currentTarget.style.transform = 'scale(1.05)';
               }}
-            >
+          >
               <img
                 src={startAitrainButton}
                 alt="Start AI Model Training"
@@ -945,11 +945,11 @@ export default function TrainAiPage() {
                   width: 'auto'
                 }}
               />
-            </button>
-          </div>
+          </button>
         </div>
-      </div>
-      
+        </div>
+        </div>
+
       {/* traincount_box (독립 개체) */}
       <div
         style={{
@@ -972,12 +972,12 @@ export default function TrainAiPage() {
             }}
           />
           <div
-            style={{
+            style={{ 
               position: 'absolute',
               top: '10px',
               left: '50%',
               transform: 'translateX(-50%)',
-              width: '100%',
+              width: '100%', 
               padding: '10px',
               display: 'flex',
               flexDirection: 'column',

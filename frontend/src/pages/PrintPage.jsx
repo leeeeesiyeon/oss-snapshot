@@ -124,7 +124,7 @@ export default function PrintPage() {
                 drawWidth = scaledWidth;
                 drawHeight = scaledWidth / imgAspect;
                 drawY = (scaledHeight - drawHeight) / 2;
-              }
+      }
               
               photoCtx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
               photoCanvases.push({
@@ -141,7 +141,7 @@ export default function PrintPage() {
           
           img.onerror = () => {
             console.error('이미지 로드 실패:', photos[i]);
-            resolve();
+          resolve();
           };
           
           img.src = photos[i];
@@ -171,28 +171,28 @@ export default function PrintPage() {
       
       // 5. 최종 이미지 저장
       finalCanvas.toBlob((blob) => {
-        if (!blob) {
-          alert('이미지 생성에 실패했습니다. 다시 시도해주세요.');
-          return;
-        }
-        
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'snapshot.png';
-        link.style.display = 'none';
-        
-        document.body.appendChild(link);
-        link.click();
-        
-        setTimeout(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }, 100);
-      }, 'image/png', 1.0);
+                if (!blob) {
+                  alert('이미지 생성에 실패했습니다. 다시 시도해주세요.');
+                  return;
+                }
+                
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'snapshot.png';
+                link.style.display = 'none';
+                
+                document.body.appendChild(link);
+                link.click();
+                
+                setTimeout(() => {
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                }, 100);
+              }, 'image/png', 1.0);
       
-    } catch (error) {
-      alert('파일 저장 중 오류가 발생했습니다: ' + error.message);
+            } catch (error) {
+              alert('파일 저장 중 오류가 발생했습니다: ' + error.message);
       console.error('저장 오류:', error);
     }
   };
