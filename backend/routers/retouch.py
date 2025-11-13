@@ -10,9 +10,9 @@ router = APIRouter(prefix="/api", tags=["retouch"])
 @router.post("/retouch-upload")
 async def retouch_image_upload(file: UploadFile = File(...)):
     """
-    FormData로 이미지 업로드하여 Replicate API로 보정
-    - GFPGAN 모델 사용
-    - 피부/윤곽/눈/입 전체 보정
+    FormData로 이미지 업로드하여 AI 보정
+    - MediaPipe FaceMesh로 얼굴 랜드마크 추출
+    - OpenCV로 눈 확대 및 얼굴형 축소
     """
     try:
         image_data = await file.read()

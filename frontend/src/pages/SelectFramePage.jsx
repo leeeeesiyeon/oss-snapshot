@@ -73,13 +73,6 @@ export default function SelectFramePage() {
           const photo = photos[i];
           setProcessingProgress({ current: i + 1, total: photos.length });
           
-          // Rate limit 방지를 위해 각 요청 사이에 딜레이 추가 (5초)
-          // 무료 티어: 분당 6회 요청 제한
-          if (i > 0) {
-            console.log(`Rate limit 방지를 위해 ${5}초 대기 중...`);
-            await new Promise(resolve => setTimeout(resolve, 5000)); // 5초 대기
-          }
-          
           try {
             let blob;
             
