@@ -43,6 +43,13 @@ export default function TrainAiPage() {
   const [rightEyeOpen, setRightEyeOpen] = useState(true);
   const [leftEyePos, setLeftEyePos] = useState({ x: 0, y: 0 });
   const [rightEyePos, setRightEyePos] = useState({ x: 0, y: 0 });
+  
+  // 이전 프레임의 눈 상태를 유지하기 위한 ref 추가
+  const prevEyeStateRef = useRef({
+    left: { isOpen: true, center: { x: 0, y: 0 } },
+    right: { isOpen: true, center: { x: 0, y: 0 } }
+  });
+  
   useEffect(() => {
     const load = async () => {
       try {
@@ -317,8 +324,10 @@ export default function TrainAiPage() {
             }
           }
           
+          // keypoints가 부족하면 null 반환
+          // 단, 이전에 눈이 떴던 상태였다면 눈을 감았을 가능성이 높음
           if (eyePoints.length < 4) {
-            return { isOpen: true, center: { x: 0, y: 0 } };
+            return null;
           }
           
           // 눈의 최상단, 최하단, 최좌측, 최우측 좌표 찾기
@@ -341,23 +350,27 @@ export default function TrainAiPage() {
           const eyeCenterY = (minY + maxY) / 2;
           
           // 눈의 세로/가로 비율 계산 (EAR: Eye Aspect Ratio)
-          // 비율이 0.15 이하이면 눈이 감긴 것으로 판단
-          // 눈이 떴을 때는 보통 0.2~0.3 정도, 감았을 때는 0.1 이하
+          // 비율이 0.20 이하이면 눈이 감긴 것으로 판단 (더 민감하게)
+          // 눈이 떴을 때는 보통 0.25~0.35 정도, 조금 감으면 0.15~0.20 정도
           const eyeAspectRatio = eyeWidth > 0 ? eyeHeight / eyeWidth : 1;
-          const isOpen = eyeAspectRatio > 0.15;
+          
+          // 눈이 너무 작으면(세로 길이가 가로 길이의 12% 미만) 눈을 감은 것으로 판단
+          // 또는 EAR이 0.20 이하면 눈을 감은 것으로 판단 (조금만 감아도 감은 것으로 판단)
+          const isOpen = eyeAspectRatio > 0.20 && eyeHeight >= eyeWidth * 0.12;
           
           return { isOpen, center: { x: eyeCenterX, y: eyeCenterY } };
         };
         
         // Human.js의 face 객체에서 직접 눈 정보 가져오기 시도
-        let leftEyeState = { isOpen: true, center: { x: 0, y: 0 } };
-        let rightEyeState = { isOpen: true, center: { x: 0, y: 0 } };
+        let leftEyeState = null;
+        let rightEyeState = null;
         
+        // 왼쪽 눈 감지
         // 방법 1: face 객체에 직접 눈 정보가 있는지 확인
         if (face.leftEye && Array.isArray(face.leftEye) && face.leftEye.length > 0) {
           // Human.js가 직접 눈 정보를 제공하는 경우
           const leftEyePoints = face.leftEye.map(kp => getKeypointCoords(kp)).filter(c => c);
-          if (leftEyePoints.length > 0) {
+          if (leftEyePoints.length >= 4) {
             let minY = Math.min(...leftEyePoints.map(p => p.y));
             let maxY = Math.max(...leftEyePoints.map(p => p.y));
             let minX = Math.min(...leftEyePoints.map(p => p.x));
@@ -365,20 +378,28 @@ export default function TrainAiPage() {
             const eyeHeight = maxY - minY;
             const eyeWidth = maxX - minX;
             const eyeAspectRatio = eyeWidth > 0 ? eyeHeight / eyeWidth : 1;
+            // 눈이 너무 작으면(세로 길이가 가로 길이의 12% 미만) 눈을 감은 것으로 판단
+            // 또는 EAR이 0.20 이하면 눈을 감은 것으로 판단 (조금만 감아도 감은 것으로 판단)
+            const isOpen = eyeAspectRatio > 0.20 && eyeHeight >= eyeWidth * 0.12;
             leftEyeState = {
-              isOpen: eyeAspectRatio > 0.15,
+              isOpen: isOpen,
               center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
             };
           }
-        } else {
-          // 방법 2: MediaPipe 얼굴 랜드마크 인덱스 사용
+        }
+        
+        // 방법 2: MediaPipe 얼굴 랜드마크 인덱스 사용 (방법 1이 실패했거나 없을 때)
+        if (leftEyeState === null) {
           const leftEyeIndices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
           leftEyeState = detectEyeState(leftEyeIndices);
         }
         
+        // 오른쪽 눈 감지 - 왼쪽 눈과 완전히 동일한 방식으로 처리
+        // 방법 1: face 객체에 직접 눈 정보가 있는지 확인
         if (face.rightEye && Array.isArray(face.rightEye) && face.rightEye.length > 0) {
+          // Human.js가 직접 눈 정보를 제공하는 경우
           const rightEyePoints = face.rightEye.map(kp => getKeypointCoords(kp)).filter(c => c);
-          if (rightEyePoints.length > 0) {
+          if (rightEyePoints.length >= 4) {
             let minY = Math.min(...rightEyePoints.map(p => p.y));
             let maxY = Math.max(...rightEyePoints.map(p => p.y));
             let minX = Math.min(...rightEyePoints.map(p => p.x));
@@ -386,14 +407,56 @@ export default function TrainAiPage() {
             const eyeHeight = maxY - minY;
             const eyeWidth = maxX - minX;
             const eyeAspectRatio = eyeWidth > 0 ? eyeHeight / eyeWidth : 1;
+            // 왼쪽 눈과 동일한 임계값 사용
+            const isOpen = eyeAspectRatio > 0.12 && eyeHeight >= eyeWidth * 0.08;
             rightEyeState = {
-              isOpen: eyeAspectRatio > 0.15,
+              isOpen: isOpen,
               center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
             };
           }
-        } else {
+        }
+        
+        // 방법 2: MediaPipe 얼굴 랜드마크 인덱스 사용 (방법 1이 실패했거나 없을 때)
+        if (rightEyeState === null) {
           const rightEyeIndices = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
           rightEyeState = detectEyeState(rightEyeIndices);
+        }
+        
+        // 이전 상태와 병합: 감지 실패 시 이전 상태 유지
+        if (leftEyeState === null) {
+          // 감지 실패 시: 이전에 눈이 떴던 상태였다면 눈을 감았을 가능성이 높음
+          // 하지만 확실하지 않으므로 이전 상태 유지
+          leftEyeState = prevEyeStateRef.current.left;
+          
+          // 이전에 눈이 떴던 상태였는데 갑자기 감지가 안 되면 눈을 감은 것으로 판단
+          if (prevEyeStateRef.current.left.isOpen && prevEyeStateRef.current.left.center.x > 0) {
+            // 눈을 감았을 가능성이 높지만, 확실하지 않으므로 이전 상태 유지
+            // 대신 임시로 눈을 감은 것으로 표시하지 않음 (너무 민감할 수 있음)
+          }
+        } else {
+          // 위치가 유효하면 업데이트
+          if (leftEyeState.center.x > 0 && leftEyeState.center.y > 0) {
+            prevEyeStateRef.current.left = leftEyeState;
+          } else {
+            // 위치가 유효하지 않으면 이전 위치는 유지하되, 상태는 업데이트
+            leftEyeState = {
+              isOpen: leftEyeState.isOpen,
+              center: prevEyeStateRef.current.left.center
+            };
+            prevEyeStateRef.current.left = leftEyeState;
+          }
+        }
+        
+        // 왼쪽 눈과 동일한 방식으로 이전 상태 병합
+        if (rightEyeState === null) {
+          rightEyeState = prevEyeStateRef.current.right;
+        } else {
+          // 위치가 유효하면 업데이트, 아니면 이전 위치 유지
+          if (rightEyeState.center.x > 0 && rightEyeState.center.y > 0) {
+            prevEyeStateRef.current.right = rightEyeState;
+          } else {
+            rightEyeState = prevEyeStateRef.current.right;
+          }
         }
         
         // 눈 상태를 state에 업데이트
@@ -407,14 +470,48 @@ export default function TrainAiPage() {
         }
         
         // 눈 상태 즉시 표시 (빨간색: 눈 뜸, 흰색: 눈 감음)
-        if (leftEyeState.center.x > 0 && leftEyeState.center.y > 0) {
-          const eyeColor = leftEyeState.isOpen ? "rgba(255, 0, 0, 1)" : "rgba(255, 255, 255, 1)";
-          drawKeypoint(leftEyeState.center.x, leftEyeState.center.y, eyeColor, 12);
+        // 이전 위치가 있으면 항상 표시
+        let leftEyeDisplayPos = (leftEyeState && leftEyeState.center.x > 0 && leftEyeState.center.y > 0)
+          ? leftEyeState.center 
+          : prevEyeStateRef.current.left.center;
+        let rightEyeDisplayPos = (rightEyeState && rightEyeState.center.x > 0 && rightEyeState.center.y > 0)
+          ? rightEyeState.center 
+          : prevEyeStateRef.current.right.center;
+        
+        // 왼쪽 눈이 감지되었는데 오른쪽 눈 위치가 없으면 대칭 위치 계산
+        if (leftEyeDisplayPos.x > 0 && leftEyeDisplayPos.y > 0 && 
+            (rightEyeDisplayPos.x === 0 || rightEyeDisplayPos.y === 0)) {
+          const faceCenterX = videoWidth / 2;
+          const leftEyeX = leftEyeDisplayPos.x;
+          const rightEyeX = faceCenterX + (faceCenterX - leftEyeX);
+          rightEyeDisplayPos = { x: rightEyeX, y: leftEyeDisplayPos.y };
+          // 오른쪽 눈 상태도 왼쪽 눈과 동일하게 설정 (임시)
+          if (!rightEyeState) {
+            rightEyeState = {
+              isOpen: leftEyeState ? leftEyeState.isOpen : true,
+              center: rightEyeDisplayPos
+            };
+          }
         }
         
-        if (rightEyeState.center.x > 0 && rightEyeState.center.y > 0) {
-          const eyeColor = rightEyeState.isOpen ? "rgba(255, 0, 0, 1)" : "rgba(255, 255, 255, 1)";
-          drawKeypoint(rightEyeState.center.x, rightEyeState.center.y, eyeColor, 12);
+        // 왼쪽 눈 표시
+        if (leftEyeDisplayPos.x > 0 && leftEyeDisplayPos.y > 0) {
+          const isLeftEyeOpen = leftEyeState ? leftEyeState.isOpen : prevEyeStateRef.current.left.isOpen;
+          const eyeColor = isLeftEyeOpen ? "rgba(255, 0, 0, 1)" : "rgba(255, 255, 255, 1)";
+          drawKeypoint(leftEyeDisplayPos.x, leftEyeDisplayPos.y, eyeColor, 12);
+        }
+        
+        // 오른쪽 눈 표시 (항상 표시)
+        if (rightEyeDisplayPos.x > 0 && rightEyeDisplayPos.y > 0) {
+          // 오른쪽 눈 상태 확인: 현재 상태가 있으면 사용, 없으면 이전 상태 사용
+          let isRightEyeOpen = true;
+          if (rightEyeState) {
+            isRightEyeOpen = rightEyeState.isOpen;
+          } else if (prevEyeStateRef.current.right) {
+            isRightEyeOpen = prevEyeStateRef.current.right.isOpen;
+          }
+          const eyeColor = isRightEyeOpen ? "rgba(255, 0, 0, 1)" : "rgba(255, 255, 255, 1)";
+          drawKeypoint(rightEyeDisplayPos.x, rightEyeDisplayPos.y, eyeColor, 12);
         }
         
         // 간단하게 모든 얼굴 keypoints를 점으로 표시
