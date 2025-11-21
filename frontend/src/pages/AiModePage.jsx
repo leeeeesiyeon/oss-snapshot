@@ -12,7 +12,7 @@ const videoConstraints = {
 };
 
 const AI_REQUIRED_STABLE = 5;
-const AI_CONF_THRESHOLD = 0.7;
+const AI_CONF_THRESHOLD = 0.67;
 const AI_POSES = ["Wink", "V sign", "Close up", "Surprise"];
 
 // AI 모드 페이지
@@ -84,9 +84,20 @@ export default function AiModePage() {
         
         // 학습할 때와 동일한 방식으로 features 추출
         let features = [];
+        const targetPose = AI_POSES[aiTargetIndexRef.current];
         
-        // Body keypoints 추출 (학습 시와 동일)
-        if (result.body && result.body.length > 0) {
+        // 각 포즈별로 필요한 keypoints만 사용
+        // Wink: Face만 (눈 감았는지 확인)
+        // Close up: Face만 (얼굴만 있는지 확인)
+        // V sign: Hand만 (손만 확인)
+        // Surprise: Body (팔/손목이 얼굴쪽) + Face (입 벌림 정도 확인)
+        const useBody = targetPose === "Surprise";
+        const useFace = targetPose === "Wink" || targetPose === "Close up" || targetPose === "Surprise";
+        const useHand = targetPose === "V sign";
+        
+        // Body keypoints 추출 (모든 포즈에서 제외)
+        let bodyKeypointsCount = 0;
+        if (useBody && result.body && result.body.length > 0) {
           const body = result.body[0];
           let keypoints = [];
           
@@ -128,12 +139,14 @@ export default function AiModePage() {
             if (x !== null && y !== null) {
               features.push(x);
               features.push(y);
+              bodyKeypointsCount++;
             }
           }
         }
         
-        // Face keypoints 추출 (학습 시와 동일)
-        if (result.face && result.face.length > 0) {
+        // Face keypoints 추출 (Wink, Close up, Surprise에서만 사용)
+        let faceKeypointsCount = 0;
+        if (useFace && result.face && result.face.length > 0) {
           const face = result.face[0];
           if (face.keypoints && Array.isArray(face.keypoints)) {
             for (const kp of face.keypoints) {
@@ -157,13 +170,15 @@ export default function AiModePage() {
               if (x !== null && y !== null) {
                 features.push(x);
                 features.push(y);
+                faceKeypointsCount++;
               }
             }
           }
         }
         
-        // Hand keypoints 추출 (학습 시와 동일)
-        if (result.hand && result.hand.length > 0) {
+        // Hand keypoints 추출 (V sign에서만 사용)
+        let handKeypointsCount = 0;
+        if (useHand && result.hand && result.hand.length > 0) {
           for (const hand of result.hand) {
             let handKeypoints = [];
             
@@ -196,31 +211,60 @@ export default function AiModePage() {
               if (x !== null && y !== null) {
                 features.push(x);
                 features.push(y);
+                handKeypointsCount++;
               }
             }
           }
         }
         
+        // 디버깅 정보
+        console.log(`[${targetPose} Feature] Body: ${bodyKeypointsCount}, Face: ${faceKeypointsCount}, Hand: ${handKeypointsCount}, Total: ${features.length}`);
+        
+        const targetPose = AI_POSES[aiTargetIndexRef.current];
+        
         // features가 있으면 예측 요청
         if (features.length > 0) {
-          const res = await fetch("http://127.0.0.1:8000/api/predict", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ features })
-          });
+          try {
+            const res = await fetch("http://127.0.0.1:8000/api/predict", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ features })
+            });
 
-          if (res.ok) {
-            const json = await res.json();
-            const predicted = json.pose;
-            const confidence = json.confidence ?? 0;
-            const targetPose = AI_POSES[aiTargetIndexRef.current];
-            setStatusText(`Show ${targetPose}\nDetected: ${predicted} (${(confidence*100).toFixed(0)}%)`);
+            if (res.ok) {
+              const json = await res.json();
+              const predicted = json.pose;
+              const confidence = json.confidence ?? 0;
+              
+              // 디버깅: feature 개수와 예측 결과 로그
+              if (targetPose === "Close up") {
+                console.log(`[Close up] Features: ${features.length}, Predicted: ${predicted}, Confidence: ${(confidence*100).toFixed(1)}%`);
+              }
+              
+              // 화면에 목표 포즈와 감지된 포즈, 신뢰도 표시
+              setStatusText(`Show ${targetPose}\nDetected: ${predicted} (${(confidence*100).toFixed(0)}%)`);
 
-            if (predicted === targetPose && confidence >= AI_CONF_THRESHOLD) {
-              poseStableCountRef.current += 1;
+              if (predicted === targetPose && confidence >= AI_CONF_THRESHOLD) {
+                poseStableCountRef.current += 1;
+              } else {
+                poseStableCountRef.current = 0;
+              }
             } else {
+              // 예측 요청 실패 시 기본 메시지 표시
+              setStatusText(`Show ${targetPose}\nDetected: - (-%)`);
               poseStableCountRef.current = 0;
             }
+          } catch (error) {
+            // 예측 요청 에러 시 기본 메시지 표시
+            console.error("Prediction error:", error);
+            setStatusText(`Show ${targetPose}\nDetected: - (-%)`);
+            poseStableCountRef.current = 0;
+          }
+        } else {
+          // features가 없을 때 기본 메시지 표시
+          setStatusText(`Show ${targetPose}\nDetected: - (-%)`);
+          poseStableCountRef.current = 0;
+        }
 
             if (poseStableCountRef.current >= AI_REQUIRED_STABLE && !isShootingRef.current) {
               poseStableCountRef.current = 0;
@@ -453,7 +497,9 @@ export default function AiModePage() {
                     fontSize: '1rem',
                     color: '#f5f5f5',
                     textShadow: '0 0 10px #1a1a1a',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
+                    whiteSpace: 'pre-line',
+                    textAlign: 'center'
                   }}
                 >
                   {statusText}
@@ -593,4 +639,5 @@ export default function AiModePage() {
     </div>
   );
 }
+
 

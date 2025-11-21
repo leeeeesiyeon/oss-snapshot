@@ -634,8 +634,17 @@ export default function TrainAiPage() {
         
         let features = [];
         
-        // Body keypoints 추출
-        if (result.body && result.body.length > 0) {
+        // 각 포즈별로 필요한 keypoints만 사용 (예측 시와 동일)
+        // Wink: Face만 (눈 감았는지 확인)
+        // Close up: Face만 (얼굴만 있는지 확인)
+        // V sign: Hand만 (손만 확인)
+        // Surprise: Body (팔/손목이 얼굴쪽) + Face (입 벌림 정도 확인)
+        const useBody = poseName === "Surprise";
+        const useFace = poseName === "Wink" || poseName === "Close up" || poseName === "Surprise";
+        const useHand = poseName === "V sign";
+        
+        // Body keypoints 추출 (모든 포즈에서 제외)
+        if (useBody && result.body && result.body.length > 0) {
           const body = result.body[0];
           let keypoints = [];
           
@@ -682,8 +691,8 @@ export default function TrainAiPage() {
           }
         }
         
-        // Face keypoints 추출 (윙크, 놀람 등 얼굴 포즈를 위해 - 입 벌림 여부도 포함)
-        if (result.face && result.face.length > 0) {
+        // Face keypoints 추출 (Wink, Close up, Surprise에서만 사용)
+        if (useFace && result.face && result.face.length > 0) {
           const face = result.face[0];
           if (face.keypoints && Array.isArray(face.keypoints)) {
             // 얼굴 keypoints 추가 (눈, 입 등 모든 얼굴 특징점)
@@ -713,9 +722,8 @@ export default function TrainAiPage() {
           }
         }
         
-        // Hand keypoints 추출 (V sign, Close up 등 손 포즈를 위해)
-        // Human.js는 각 손마다 21개의 keypoints 제공 (손목 1개 + 각 손가락당 4개 관절)
-        if (result.hand && result.hand.length > 0) {
+        // Hand keypoints 추출 (V sign에서만 사용)
+        if (useHand && result.hand && result.hand.length > 0) {
           // 양손 모두 처리
           for (const hand of result.hand) {
             // Human.js는 keypoints 또는 landmarks를 제공할 수 있음

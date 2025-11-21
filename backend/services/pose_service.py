@@ -133,6 +133,32 @@ def train_model():
             return {"message": f"Anomaly detection model trained! (Total: {len(X_train)} samples, Pose: {pose_name})"}
         else:
             # 2개 이상 포즈가 있는 경우: 기존 K-NN 분류기 사용
+            # K 값 조정: 샘플 수가 적으면 k를 줄이고, 많으면 늘림
+            n_samples = len(X_train)
+            n_poses = unique_poses
+            
+            # 각 포즈별 샘플 수 확인
+            pose_counts = {}
+            for label in set(y_train):
+                pose_counts[label] = y_train.count(label)
+            
+            print(f"[Training] 포즈별 샘플 수: {pose_counts}")
+            print(f"[Training] 총 샘플: {n_samples}, 포즈 종류: {n_poses}")
+            
+            # K 값 결정: 샘플이 적으면 k=3, 많으면 k=5
+            # 단, k는 각 포즈의 최소 샘플 수보다 작아야 함
+            min_samples_per_pose = min(pose_counts.values())
+            optimal_k = min(5, max(3, min_samples_per_pose // 2))
+            optimal_k = max(1, optimal_k)  # 최소 1
+            
+            print(f"[Training] K-NN k 값: {optimal_k} (최소 샘플 수: {min_samples_per_pose})")
+            
+            # K 값이 다르면 새로운 분류기 생성
+            if optimal_k != classifier.n_neighbors:
+                from sklearn.neighbors import KNeighborsClassifier
+                classifier = KNeighborsClassifier(n_neighbors=optimal_k, weights='distance')
+                print(f"[Training] K 값 변경: {classifier.n_neighbors} -> {optimal_k}")
+            
             try:
                 classifier.fit(X_train, y_train)
             except Exception as e:
@@ -197,14 +223,50 @@ def predict_pose(features: List[float]) -> Dict[str, any]:
         else:
             # 기존 K-NN 분류기 방식 (2개 이상 포즈)
             loaded_classifier = loaded_model
+            
+            # 모델이 기대하는 feature 개수 확인
+            expected_features = getattr(loaded_classifier, 'n_features_in_', None)
+            if expected_features is None:
+                # sklearn 버전에 따라 다를 수 있음
+                # 학습 데이터에서 feature 개수 추론 시도
+                if hasattr(loaded_classifier, '_fit_X') and loaded_classifier._fit_X is not None:
+                    expected_features = loaded_classifier._fit_X.shape[1]
+                else:
+                    # 기본값 사용 (학습 시 사용된 첫 번째 샘플 길이)
+                    expected_features = len(features)
+            
+            # feature 개수가 다르면 조정
+            if len(features) != expected_features:
+                if len(features) > expected_features:
+                    # feature가 더 많으면 앞에서부터 자르기
+                    features = features[:expected_features]
+                else:
+                    # feature가 적으면 0으로 패딩
+                    features = features + [0.0] * (expected_features - len(features))
+            
+            # 학습 시와 동일하게 정규화 적용 (중요!)
+            features_array = np.array([features])
+            max_val = np.max(features_array)
+            if max_val != 0:
+                features_array = features_array / max_val
+            else:
+                raise HTTPException(status_code=400, detail="Invalid input features: all zeros")
         
             # 뇌에게 "이 좌표 뭐야?"라고 물어봄 (예측)
-            prediction = loaded_classifier.predict([features])
+            prediction = loaded_classifier.predict(features_array)
             # "이 포즈 90% 확신해" (신뢰도)
-            probability = loaded_classifier.predict_proba([features])
+            probability = loaded_classifier.predict_proba(features_array)
             
             pose_name = prediction[0]
             confidence = np.max(probability[0])
+            
+            # 디버깅: 예측 결과 로그
+            prob_dict = {str(k): float(v) for k, v in zip(loaded_classifier.classes_, probability[0])}
+            print(f"[Predict] Features: {len(features)} -> {expected_features}, Predicted: {pose_name}, Confidence: {confidence:.3f}")
+            print(f"[Predict] All probabilities: {prob_dict}")
+            # Feature 값 일부 출력 (처음 10개만)
+            if len(features) > 0:
+                print(f"[Predict] Feature sample (first 10): {features[:10]}")
             
             return {"pose": pose_name, "confidence": confidence}
     
