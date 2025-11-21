@@ -639,12 +639,15 @@ export default function TrainAiPage() {
         // Close up: Face만 (얼굴만 있는지 확인)
         // V sign: Hand만 (손만 확인)
         // Surprise: Body (팔/손목이 얼굴쪽) + Face (입 벌림 정도 확인)
-        const useBody = poseName === "Surprise";
-        const useFace = poseName === "Wink" || poseName === "Close up" || poseName === "Surprise";
-        const useHand = poseName === "V sign";
+        // Background: Body + Face + Hand 모두 (일반적인 상태)
+        const useBody = poseName === "Surprise" || poseName === "Background";
+        const useFace = poseName === "Wink" || poseName === "Close up" || poseName === "Surprise" || poseName === "Background";
+        const useHand = poseName === "V sign" || poseName === "Background";
         
-        // Body keypoints 추출 (모든 포즈에서 제외)
-        if (useBody && result.body && result.body.length > 0) {
+        // Body keypoints 추출
+        // useBody가 true면 features에 추가, false여도 Close up의 경우 개수만 계산
+        let bodyKeypointsCount = 0;
+        if (result.body && result.body.length > 0) {
           const body = result.body[0];
           let keypoints = [];
           
@@ -665,8 +668,109 @@ export default function TrainAiPage() {
             }
           }
           
-          // Body 키포인트를 features 배열로 변환
+          // Body keypoints 개수 계산 (Close up을 위해 항상 계산)
           for (const kp of keypoints) {
+            if (!kp) continue;
+            
+            let x = null, y = null;
+            if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+              x = kp.position[0];
+              y = kp.position[1];
+            } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+              x = kp.positionRaw[0];
+              y = kp.positionRaw[1];
+            } else if (kp.x !== undefined && kp.y !== undefined) {
+              x = kp.x;
+              y = kp.y;
+            } else if (Array.isArray(kp) && kp.length >= 2) {
+              x = kp[0];
+              y = kp[1];
+            }
+            
+            if (x !== null && y !== null) {
+              bodyKeypointsCount++;
+              // useBody가 true일 때만 features에 추가
+              if (useBody) {
+                features.push(x);
+                features.push(y);
+              }
+            }
+          }
+        }
+        
+        // Face keypoints 추출 (Wink, Close up, Surprise에서만 사용)
+        // drawKeypoints와 동일한 방식으로 landmarks, mesh도 확인
+        let leftEyeEAR = 0;
+        let rightEyeEAR = 0;
+        let leftEyeClosed = 0; // 0: 열림, 1: 감음
+        let rightEyeClosed = 0; // 0: 열림, 1: 감음
+        
+        if (useFace && result.face && result.face.length > 0) {
+          const face = result.face[0];
+          let faceKeypoints = [];
+          
+          // Human.js의 다양한 얼굴 랜드마크 형식 지원 (drawKeypoints와 동일)
+          if (face.keypoints && Array.isArray(face.keypoints)) {
+            faceKeypoints = face.keypoints;
+          } else if (face.landmarks && Array.isArray(face.landmarks)) {
+            faceKeypoints = face.landmarks;
+          } else if (face.mesh && Array.isArray(face.mesh)) {
+            faceKeypoints = face.mesh;
+          }
+          
+          // Wink 포즈의 경우 눈 감음 상태 계산
+          if (poseName === "Wink" && faceKeypoints.length > 0) {
+            const getKeypointCoords = (kp) => {
+              if (!kp) return null;
+              if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+                return { x: kp.position[0], y: kp.position[1] };
+              } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+                return { x: kp.positionRaw[0], y: kp.positionRaw[1] };
+              } else if (kp.x !== undefined && kp.y !== undefined) {
+                return { x: kp.x, y: kp.y };
+              } else if (Array.isArray(kp) && kp.length >= 2) {
+                return { x: kp[0], y: kp[1] };
+              }
+              return null;
+            };
+            
+            // 왼쪽 눈 EAR 계산
+            const leftEyeIndices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
+            const leftEyePoints = leftEyeIndices
+              .map(idx => idx < faceKeypoints.length ? getKeypointCoords(faceKeypoints[idx]) : null)
+              .filter(p => p);
+            
+            if (leftEyePoints.length >= 4) {
+              const minY = Math.min(...leftEyePoints.map(p => p.y));
+              const maxY = Math.max(...leftEyePoints.map(p => p.y));
+              const minX = Math.min(...leftEyePoints.map(p => p.x));
+              const maxX = Math.max(...leftEyePoints.map(p => p.x));
+              const eyeHeight = maxY - minY;
+              const eyeWidth = maxX - minX;
+              leftEyeEAR = eyeWidth > 0 ? eyeHeight / eyeWidth : 0;
+              leftEyeClosed = (leftEyeEAR <= 0.20 || eyeHeight < eyeWidth * 0.12) ? 1 : 0;
+            }
+            
+            // 오른쪽 눈 EAR 계산
+            const rightEyeIndices = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
+            const rightEyePoints = rightEyeIndices
+              .map(idx => idx < faceKeypoints.length ? getKeypointCoords(faceKeypoints[idx]) : null)
+              .filter(p => p);
+            
+            if (rightEyePoints.length >= 4) {
+              const minY = Math.min(...rightEyePoints.map(p => p.y));
+              const maxY = Math.max(...rightEyePoints.map(p => p.y));
+              const minX = Math.min(...rightEyePoints.map(p => p.x));
+              const maxX = Math.max(...rightEyePoints.map(p => p.x));
+              const eyeHeight = maxY - minY;
+              const eyeWidth = maxX - minX;
+              rightEyeEAR = eyeWidth > 0 ? eyeHeight / eyeWidth : 0;
+              rightEyeClosed = (rightEyeEAR <= 0.20 || eyeHeight < eyeWidth * 0.12) ? 1 : 0;
+            }
+          }
+          
+          // 얼굴 keypoints 추가 (눈, 입 등 모든 얼굴 특징점)
+          for (const kp of faceKeypoints) {
             if (!kp) continue;
             
             let x = null, y = null;
@@ -691,35 +795,17 @@ export default function TrainAiPage() {
           }
         }
         
-        // Face keypoints 추출 (Wink, Close up, Surprise에서만 사용)
-        if (useFace && result.face && result.face.length > 0) {
-          const face = result.face[0];
-          if (face.keypoints && Array.isArray(face.keypoints)) {
-            // 얼굴 keypoints 추가 (눈, 입 등 모든 얼굴 특징점)
-            for (const kp of face.keypoints) {
-              if (!kp) continue;
-              
-              let x = null, y = null;
-              if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
-                x = kp.position[0];
-                y = kp.position[1];
-              } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
-                x = kp.positionRaw[0];
-                y = kp.positionRaw[1];
-              } else if (kp.x !== undefined && kp.y !== undefined) {
-                x = kp.x;
-                y = kp.y;
-              } else if (Array.isArray(kp) && kp.length >= 2) {
-                x = kp[0];
-                y = kp[1];
-              }
-              
-              if (x !== null && y !== null) {
-                features.push(x);
-                features.push(y);
-              }
-            }
-          }
+        // Wink 포즈: 눈 감음 상태를 feature에 추가 (Wink와 Close up 구분을 위해)
+        if (poseName === "Wink") {
+          features.push(leftEyeEAR);
+          features.push(rightEyeEAR);
+          features.push(leftEyeClosed);
+          features.push(rightEyeClosed);
+        }
+        
+        // Close up 포즈: Body keypoints 개수를 feature에 추가 (얼굴만 보이는 상태 구분을 위해)
+        if (poseName === "Close up") {
+          features.push(bodyKeypointsCount); // Body keypoints가 없거나 적다는 것을 명시
         }
         
         // Hand keypoints 추출 (V sign에서만 사용)
@@ -764,19 +850,22 @@ export default function TrainAiPage() {
           }
         }
         
+        // 디버깅: keypoints 감지 상태 확인
+        const hasBody = result.body && result.body.length > 0;
+        const hasFace = result.face && result.face.length > 0;
+        const hasHand = result.hand && result.hand.length > 0;
+        
         if (features.length === 0) {
-          // 포즈가 감지되지 않은 경우 (배경 포즈 등)
-          // 빈 배열이나 기본값을 보내거나 스킵
+          // 포즈가 감지되지 않은 경우
           skippedCount++;
-          setStatusText(`Training '${poseName}' pose... (${i + 1}/50) - Pose not detected`);
-          await new Promise(resolve => setTimeout(resolve, 100));
-          continue;
-        }
-
-        // features가 비어있으면 스킵
-        if (features.length === 0) {
-          skippedCount++;
-          setStatusText(`Training '${poseName}' pose... (${i + 1}/50) - No features extracted`);
+          let debugMsg = `Training '${poseName}' pose... (${i + 1}/50) - No features`;
+          if (poseName === "Wink" || poseName === "Close up" || poseName === "Surprise") {
+            debugMsg += ` (Face: ${hasFace ? 'detected' : 'not detected'})`;
+          } else if (poseName === "V sign") {
+            debugMsg += ` (Hand: ${hasHand ? 'detected' : 'not detected'})`;
+          }
+          setStatusText(debugMsg);
+          console.log(`[${poseName}] Body: ${hasBody}, Face: ${hasFace}, Hand: ${hasHand}, Features: ${features.length}`);
           await new Promise(resolve => setTimeout(resolve, 100));
           continue;
         }
@@ -785,11 +874,14 @@ export default function TrainAiPage() {
           // 진행 상황 표시
           setStatusText(`Training '${poseName}' pose... (${i + 1}/50)`);
           
+          // Surprise와 Background는 Body + Face + Hand를 사용하므로 feature가 많아 타임아웃을 더 길게 설정
+          const timeoutDuration = (poseName === "Surprise" || poseName === "Background") ? 15000 : 5000;
+          
           const response = await axios.post(`${API_URL}/api/train`, {
             label: poseName,
             features: features
           }, {
-            timeout: 5000 // 5초 타임아웃 설정
+            timeout: timeoutDuration
           });
           
           successCount++;

@@ -32,7 +32,9 @@ export default function AiModePage() {
   const aiTargetIndexRef = useRef(0);
   const capturedPhotosRef = useRef([]);
   const isShootingRef = useRef(false);
+  const isPausedRef = useRef(false); // 일시정지 상태 (다음 포즈 준비 시간)
   const countdownTimerRef = useRef(null);
+  const waitTimerRef = useRef(null); // 대기 시간 타이머
 
   useEffect(() => {
     aiTargetIndexRef.current = aiTargetIndex;
@@ -69,6 +71,12 @@ export default function AiModePage() {
     };
 
     const runAiLoop = async () => {
+      // 일시정지 상태면 AI 루프 건너뛰기 (카메라 화면은 유지)
+      if (isPausedRef.current) {
+        aiLoopRafRef.current = requestAnimationFrame(runAiLoop);
+        return;
+      }
+
       if (!detectorRef.current || !webcamRef.current) {
         aiLoopRafRef.current = requestAnimationFrame(runAiLoop);
         return;
@@ -91,13 +99,15 @@ export default function AiModePage() {
         // Close up: Face만 (얼굴만 있는지 확인)
         // V sign: Hand만 (손만 확인)
         // Surprise: Body (팔/손목이 얼굴쪽) + Face (입 벌림 정도 확인)
-        const useBody = targetPose === "Surprise";
-        const useFace = targetPose === "Wink" || targetPose === "Close up" || targetPose === "Surprise";
-        const useHand = targetPose === "V sign";
+        // Background: Body + Face + Hand 모두 (일반적인 상태)
+        const useBody = targetPose === "Surprise" || targetPose === "Background";
+        const useFace = targetPose === "Wink" || targetPose === "Close up" || targetPose === "Surprise" || targetPose === "Background";
+        const useHand = targetPose === "V sign" || targetPose === "Background";
         
-        // Body keypoints 추출 (모든 포즈에서 제외)
+        // Body keypoints 추출
+        // useBody가 true면 features에 추가, false여도 Close up의 경우 개수만 계산
         let bodyKeypointsCount = 0;
-        if (useBody && result.body && result.body.length > 0) {
+        if (result.body && result.body.length > 0) {
           const body = result.body[0];
           let keypoints = [];
           
@@ -117,8 +127,109 @@ export default function AiModePage() {
             }
           }
           
-          // Body 키포인트를 features 배열로 변환 (정규화 없이 원본 좌표 사용)
+          // Body keypoints 개수 계산 (Close up을 위해 항상 계산)
           for (const kp of keypoints) {
+            if (!kp) continue;
+            
+            let x = null, y = null;
+            if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+              x = kp.position[0];
+              y = kp.position[1];
+            } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+              x = kp.positionRaw[0];
+              y = kp.positionRaw[1];
+            } else if (kp.x !== undefined && kp.y !== undefined) {
+              x = kp.x;
+              y = kp.y;
+            } else if (Array.isArray(kp) && kp.length >= 2) {
+              x = kp[0];
+              y = kp[1];
+            }
+            
+            if (x !== null && y !== null) {
+              bodyKeypointsCount++;
+              // useBody가 true일 때만 features에 추가
+              if (useBody) {
+                features.push(x);
+                features.push(y);
+              }
+            }
+          }
+        }
+        
+        // Face keypoints 추출 (Wink, Close up, Surprise에서만 사용)
+        // drawKeypoints와 동일한 방식으로 landmarks, mesh도 확인
+        let faceKeypointsCount = 0;
+        let leftEyeEAR = 0;
+        let rightEyeEAR = 0;
+        let leftEyeClosed = 0; // 0: 열림, 1: 감음
+        let rightEyeClosed = 0; // 0: 열림, 1: 감음
+        
+        if (useFace && result.face && result.face.length > 0) {
+          const face = result.face[0];
+          let faceKeypoints = [];
+          
+          // Human.js의 다양한 얼굴 랜드마크 형식 지원 (drawKeypoints와 동일)
+          if (face.keypoints && Array.isArray(face.keypoints)) {
+            faceKeypoints = face.keypoints;
+          } else if (face.landmarks && Array.isArray(face.landmarks)) {
+            faceKeypoints = face.landmarks;
+          } else if (face.mesh && Array.isArray(face.mesh)) {
+            faceKeypoints = face.mesh;
+          }
+          
+          // Wink 포즈의 경우 눈 감음 상태 계산
+          if (targetPose === "Wink" && faceKeypoints.length > 0) {
+            const getKeypointCoords = (kp) => {
+              if (!kp) return null;
+              if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+                return { x: kp.position[0], y: kp.position[1] };
+              } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+                return { x: kp.positionRaw[0], y: kp.positionRaw[1] };
+              } else if (kp.x !== undefined && kp.y !== undefined) {
+                return { x: kp.x, y: kp.y };
+              } else if (Array.isArray(kp) && kp.length >= 2) {
+                return { x: kp[0], y: kp[1] };
+              }
+              return null;
+            };
+            
+            // 왼쪽 눈 EAR 계산
+            const leftEyeIndices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
+            const leftEyePoints = leftEyeIndices
+              .map(idx => idx < faceKeypoints.length ? getKeypointCoords(faceKeypoints[idx]) : null)
+              .filter(p => p);
+            
+            if (leftEyePoints.length >= 4) {
+              const minY = Math.min(...leftEyePoints.map(p => p.y));
+              const maxY = Math.max(...leftEyePoints.map(p => p.y));
+              const minX = Math.min(...leftEyePoints.map(p => p.x));
+              const maxX = Math.max(...leftEyePoints.map(p => p.x));
+              const eyeHeight = maxY - minY;
+              const eyeWidth = maxX - minX;
+              leftEyeEAR = eyeWidth > 0 ? eyeHeight / eyeWidth : 0;
+              leftEyeClosed = (leftEyeEAR <= 0.20 || eyeHeight < eyeWidth * 0.12) ? 1 : 0;
+            }
+            
+            // 오른쪽 눈 EAR 계산
+            const rightEyeIndices = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
+            const rightEyePoints = rightEyeIndices
+              .map(idx => idx < faceKeypoints.length ? getKeypointCoords(faceKeypoints[idx]) : null)
+              .filter(p => p);
+            
+            if (rightEyePoints.length >= 4) {
+              const minY = Math.min(...rightEyePoints.map(p => p.y));
+              const maxY = Math.max(...rightEyePoints.map(p => p.y));
+              const minX = Math.min(...rightEyePoints.map(p => p.x));
+              const maxX = Math.max(...rightEyePoints.map(p => p.x));
+              const eyeHeight = maxY - minY;
+              const eyeWidth = maxX - minX;
+              rightEyeEAR = eyeWidth > 0 ? eyeHeight / eyeWidth : 0;
+              rightEyeClosed = (rightEyeEAR <= 0.20 || eyeHeight < eyeWidth * 0.12) ? 1 : 0;
+            }
+          }
+          
+          for (const kp of faceKeypoints) {
             if (!kp) continue;
             
             let x = null, y = null;
@@ -139,41 +250,22 @@ export default function AiModePage() {
             if (x !== null && y !== null) {
               features.push(x);
               features.push(y);
-              bodyKeypointsCount++;
+              faceKeypointsCount++;
             }
           }
         }
         
-        // Face keypoints 추출 (Wink, Close up, Surprise에서만 사용)
-        let faceKeypointsCount = 0;
-        if (useFace && result.face && result.face.length > 0) {
-          const face = result.face[0];
-          if (face.keypoints && Array.isArray(face.keypoints)) {
-            for (const kp of face.keypoints) {
-              if (!kp) continue;
-              
-              let x = null, y = null;
-              if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
-                x = kp.position[0];
-                y = kp.position[1];
-              } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
-                x = kp.positionRaw[0];
-                y = kp.positionRaw[1];
-              } else if (kp.x !== undefined && kp.y !== undefined) {
-                x = kp.x;
-                y = kp.y;
-              } else if (Array.isArray(kp) && kp.length >= 2) {
-                x = kp[0];
-                y = kp[1];
-              }
-              
-              if (x !== null && y !== null) {
-                features.push(x);
-                features.push(y);
-                faceKeypointsCount++;
-              }
-            }
-          }
+        // Wink 포즈: 눈 감음 상태를 feature에 추가 (Wink와 Close up 구분을 위해)
+        if (targetPose === "Wink") {
+          features.push(leftEyeEAR);
+          features.push(rightEyeEAR);
+          features.push(leftEyeClosed);
+          features.push(rightEyeClosed);
+        }
+        
+        // Close up 포즈: Body keypoints 개수를 feature에 추가 (얼굴만 보이는 상태 구분을 위해)
+        if (targetPose === "Close up") {
+          features.push(bodyKeypointsCount); // Body keypoints가 없거나 적다는 것을 명시
         }
         
         // Hand keypoints 추출 (V sign에서만 사용)
@@ -223,16 +315,263 @@ export default function AiModePage() {
         // features가 있으면 예측 요청
         if (features.length > 0) {
           try {
-            const res = await fetch("http://127.0.0.1:8000/api/predict", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ features })
-            });
+            let predicted = null;
+            let confidence = 0;
+            let requestSuccess = false;
 
-            if (res.ok) {
-              const json = await res.json();
-              const predicted = json.pose;
-              const confidence = json.confidence ?? 0;
+            // 1. Wink 포즈: 상호 필수 (AND Condition)
+            // 모델도 "Wink"라고 해야 하고, 실제로 눈도 깜빡여야 인정
+            if (targetPose === "Wink") {
+              // 1차: AI 모델 예측 시도
+              const res = await fetch("http://127.0.0.1:8000/api/predict", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ features })
+              });
+
+              if (res.ok) {
+                const json = await res.json();
+                predicted = json.pose;
+                confidence = json.confidence ?? 0;
+                
+                // 2차: 눈 상태 검증 (규칙 기반)
+                const isEyeWinking = leftEyeClosed !== rightEyeClosed;
+                
+                // [변경] 상호 필수 조건: 모델도 Wink여야 하고, 눈도 감아야 함
+                if (predicted === "Wink") {
+                  if (!isEyeWinking) {
+                    // 모델은 윙크라는데 실제 눈은 안 감았으면 탈락
+                    confidence = 0; 
+                  }
+                  // 눈도 감았으면 모델 신뢰도 그대로 유지 (합격)
+                } else {
+                  // 모델이 윙크 아니라고 하면, 눈 감았어도 탈락
+                  confidence = 0;
+                }
+                
+                requestSuccess = true;
+              }
+            } else {
+              // 2. 그 외 포즈는 AI 모델 예측
+              const res = await fetch("http://127.0.0.1:8000/api/predict", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ features })
+              });
+
+              if (res.ok) {
+                const json = await res.json();
+                predicted = json.pose;
+                confidence = json.confidence ?? 0;
+                requestSuccess = true;
+                
+                // ---------------------------------------------------------
+                // 3. 포즈별 추가 검증 (Hard Rules) - AI 오인식 방지
+                // ---------------------------------------------------------
+                
+                // [Close up] 얼굴 외의 신체 부위(어깨 등)가 감지되면 절대 안 됨
+                // BlazePose 기준 11번(왼쪽 어깨), 12번(오른쪽 어깨)부터 몸통임
+                // 어깨가 조금이라도 확실히 보이면 Close up 실패로 처리
+                if (targetPose === "Close up") {
+                   // body keypoints 다시 확인
+                   let hasBodyPart = false;
+                   if (result.body && result.body.length > 0) {
+                     const body = result.body[0];
+                     const keypoints = body.keypoints || body.pose;
+                     
+                     if (keypoints) {
+                       for (let i = 0; i < keypoints.length; i++) {
+                         const kp = keypoints[i];
+                         // score가 0.5 이상인 유효한 키포인트에 대해서만 검사
+                         const score = kp.score || kp.confidence || 0;
+                         if (score > 0.5) {
+                           // 이름으로 확인 (part 속성이 있는 경우)
+                           if (kp.part) {
+                             const name = kp.part.toLowerCase();
+                             // 얼굴 부위가 아닌 것이 감지되면
+                             if (!name.includes('nose') && !name.includes('eye') && !name.includes('ear') && !name.includes('face')) {
+                               hasBodyPart = true;
+                               // console.log(`[Close up Rejected] Detected body part: ${name} (score: ${score.toFixed(2)})`);
+                               break;
+                             }
+                           } 
+                           // 인덱스로 확인 (0~10: 얼굴, 11~: 몸통)
+                           else if (i >= 11) {
+                             hasBodyPart = true;
+                             // console.log(`[Close up Rejected] Detected body index: ${i} (score: ${score.toFixed(2)})`);
+                             break;
+                           }
+                         }
+                       }
+                     }
+                   }
+                   
+                   if (hasBodyPart) {
+                      confidence = 0; // 신뢰도 0으로 강제 설정
+                   }
+                }
+
+                // [V sign] 손이 V 모양인지 기하학적으로 검증
+                // 검지/중지는 펴져 있고, 약지/소지는 접혀 있어야 함
+                if (targetPose === "V sign") {
+                  let isVShape = false;
+                  
+                  if (result.hand && result.hand.length > 0) {
+                    for (const hand of result.hand) {
+                      const kp = hand.keypoints || hand.landmarks;
+                      if (!kp || kp.length < 21) continue;
+                      
+                      // 0: 손목
+                      // 8: 검지 끝, 12: 중지 끝 (펴져야 함)
+                      // 16: 약지 끝, 20: 소지 끝 (접혀야 함)
+                      
+                      const getDist = (idx1, idx2) => {
+                        const p1 = kp[idx1];
+                        const p2 = kp[idx2];
+                        const x1 = p1.x || p1[0] || 0;
+                        const y1 = p1.y || p1[1] || 0;
+                        const x2 = p2.x || p2[0] || 0;
+                        const y2 = p2.y || p2[1] || 0;
+                        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+                      };
+                      
+                      const wrist = 0;
+                      // 손목에서 손가락 끝까지의 거리 계산
+                      const distIndex = getDist(wrist, 8);
+                      const distMiddle = getDist(wrist, 12);
+                      const distRing = getDist(wrist, 16);
+                      const distPinky = getDist(wrist, 20);
+                      
+                      // V sign 조건:
+                      // 1. 검지와 중지가 길게 펴져 있어야 함 (약지/소지보다 현저히 길어야 함)
+                      // 2. 보통 V sign은 검지/중지 길이가 약지/소지 길이의 1.3배 이상
+                      
+                      const avgOpen = (distIndex + distMiddle) / 2;
+                      const avgClosed = (distRing + distPinky) / 2;
+                      
+                      // 비율이 1.2 이상이면 V sign으로 인정 (약간의 오차 허용)
+                      if (avgClosed > 0 && avgOpen > avgClosed * 1.2) {
+                        isVShape = true;
+                        // console.log(`[V sign Verified] Ratio: ${(avgOpen/avgClosed).toFixed(2)}`);
+                        break; 
+                      }
+                    }
+                  }
+                  
+                  if (!isVShape) {
+                     confidence = 0; // V 모양 아니면 탈락
+                     // console.log("[V sign Rejected] Hand shape is not V");
+                  }
+                }
+
+                // [Surprise] 나홀로 집에 표정 검증
+                // 1. 입이 벌어져 있어야 함 (입 높이 확인)
+                // 2. 손이나 손목이 얼굴 주변에 있어야 함
+                if (targetPose === "Surprise") {
+                  let isMouthOpen = false;
+                  let isHandNearFace = false;
+                  
+                  // 1. 입 벌림 확인 (Face Mesh 기준)
+                  if (result.face && result.face.length > 0) {
+                    const face = result.face[0];
+                    const kp = face.keypoints || face.landmarks || face.mesh;
+                    if (kp && kp.length > 0) {
+                       // 입 윗입술(13)과 아랫입술(14) 사이 거리 (MediaPipe 468 랜드마크 기준)
+                       // 인덱스가 다를 수 있으므로 Human.js의 mesh/landmarks 구조에 따라 접근
+                       // 간단하게 입 위(13), 아래(14) 인덱스 사용 (없으면 좌표값으로 추정)
+                       
+                       const getKeypoint = (idx) => {
+                         if (kp[idx]) {
+                           const p = kp[idx];
+                           const x = p.x || p[0] || 0;
+                           const y = p.y || p[1] || 0;
+                           return {x, y};
+                         }
+                         return null;
+                       };
+
+                       const upperLip = getKeypoint(13);
+                       const lowerLip = getKeypoint(14);
+                       
+                       // 얼굴 크기 정규화를 위한 코 높이(1)와 턱(152) 거리
+                       const nose = getKeypoint(1);
+                       const chin = getKeypoint(152);
+                       
+                       if (upperLip && lowerLip && nose && chin) {
+                         const mouthHeight = Math.abs(lowerLip.y - upperLip.y);
+                         const faceHeight = Math.abs(chin.y - nose.y);
+                         
+                         // 입 높이가 얼굴 높이의 일정 비율 이상이면 입 벌림으로 간주
+                         if (faceHeight > 0 && (mouthHeight / faceHeight) > 0.03) { // 0.05 -> 0.03 (조금만 벌려도 인정)
+                           isMouthOpen = true;
+                         }
+                       }
+                    }
+                  }
+                  
+                  // 2. 손이 얼굴 근처에 있는지 확인
+                  // 얼굴 영역(Bounding Box) 구하기
+                  let faceBox = null;
+                  if (result.face && result.face.length > 0) {
+                    const face = result.face[0];
+                    // boxRaw: [x, y, width, height] (0~1 정규화 좌표일 수도 있음)
+                    if (face.boxRaw) {
+                      faceBox = {
+                         minX: face.boxRaw[0],
+                         minY: face.boxRaw[1],
+                         maxX: face.boxRaw[0] + face.boxRaw[2],
+                         maxY: face.boxRaw[1] + face.boxRaw[3]
+                      };
+                    }
+                  }
+                  
+                  if (faceBox && result.hand && result.hand.length > 0) {
+                    for (const hand of result.hand) {
+                       const kp = hand.keypoints || hand.landmarks;
+                       if (!kp) continue;
+                       
+                       // 손의 모든 포인트 중 하나라도 얼굴 영역 주변에 있으면 인정
+                       // 얼굴 영역을 조금 확장 (위아래좌우 20% 정도)
+                       const marginX = (faceBox.maxX - faceBox.minX) * 0.3;
+                       const marginY = (faceBox.maxY - faceBox.minY) * 0.3;
+                       
+                       const expandedBox = {
+                         minX: faceBox.minX - marginX,
+                         maxX: faceBox.maxX + marginX,
+                         minY: faceBox.minY - marginY,
+                         maxY: faceBox.maxY + marginY
+                       };
+                       
+                       // 손목(0)이나 검지끝(8) 등이 얼굴 박스 안에 들어오는지 확인
+                       // 좌표계가 통일되어 있어야 함 (보통 0~width, 0~height 픽셀 좌표)
+                       // Human.js 결과값은 보통 픽셀 좌표
+                       
+                       for (let i = 0; i < Math.min(kp.length, 21); i += 4) { // 주요 포인트만 검사
+                          const p = kp[i];
+                          const x = p.x || p[0] || 0;
+                          const y = p.y || p[1] || 0;
+                          
+                          if (x >= expandedBox.minX && x <= expandedBox.maxX &&
+                              y >= expandedBox.minY && y <= expandedBox.maxY) {
+                            isHandNearFace = true;
+                            break;
+                          }
+                       }
+                       if (isHandNearFace) break;
+                    }
+                  }
+                  
+                  // 규칙 적용: 입이 안 벌어졌거나 손이 얼굴 근처에 없으면 탈락
+                  // 단, 모델이 이미 Surprise라고 했으면, 규칙 중 하나만 만족해도 인정해주는 관대함 적용?
+                  // 아니면 엄격하게 둘 다 만족해야 함? -> 요청사항: "입을 조금 벌리고, 한손목이라도 얼굴 근처에 가있어야됨" (AND 조건)
+                  if (!isMouthOpen || !isHandNearFace) {
+                    confidence = 0; // 조건 불만족 시 탈락
+                  }
+                }
+              }
+            }
+
+            if (requestSuccess) {
               
               // 디버깅: feature 개수와 예측 결과 로그
               if (targetPose === "Close up") {
@@ -246,6 +585,78 @@ export default function AiModePage() {
                 poseStableCountRef.current += 1;
               } else {
                 poseStableCountRef.current = 0;
+              }
+
+              if (poseStableCountRef.current >= AI_REQUIRED_STABLE && !isShootingRef.current) {
+                poseStableCountRef.current = 0;
+                setIsShooting(true);
+                isShootingRef.current = true;
+                let cnt = 3;
+                setCountdown(cnt);
+                setStatusText("Pose confirmed!\nTaking photo in 3 seconds");
+                countdownTimerRef.current = setInterval(() => {
+                  if (cnt <= 1) {
+                    clearInterval(countdownTimerRef.current);
+                    countdownTimerRef.current = null;
+                    setCountdown(0);
+                    setStatusText("Click");
+                    setTimeout(() => {
+                      setIsFlashing(true);
+                      const imageSrc = webcamRef.current.getScreenshot();
+                      setTimeout(() => setIsFlashing(false), 150);
+                      
+                      // 사진 저장 및 다음 단계 진행 (부수 효과 분리)
+                      setCapturedPhotos(prev => {
+                        const newPhotos = [...prev, imageSrc];
+                        return newPhotos;
+                      });
+
+                      // 상태 업데이트를 별도로 수행 (ref 사용)
+                      const currentLen = capturedPhotosRef.current.length + 1;
+                      if (currentLen >= 4 || aiTargetIndexRef.current >= AI_POSES.length - 1) {
+                        setStatusText("Capture Complete");
+                        setIsShooting(false);
+                        isShootingRef.current = false;
+                        setAiTargetIndex(AI_POSES.length);
+                        aiTargetIndexRef.current = AI_POSES.length;
+                        setTimeout(() => {
+                          navigate('/select-frame', { state: { photos: [...capturedPhotosRef.current, imageSrc] } });
+                        }, 800);
+                      } else {
+                        const nextIdx = aiTargetIndexRef.current + 1;
+                        setAiTargetIndex(nextIdx);
+                        // ref 업데이트는 useEffect에서 처리되지만, 즉시 반영을 위해 여기서도 업데이트
+                        aiTargetIndexRef.current = nextIdx; 
+                        
+                        // 3초 대기 시간 추가 (포즈 준비 시간)
+                        isPausedRef.current = true;
+                        let waitSeconds = 3;
+                        const nextPoseName = AI_POSES[nextIdx];
+                        setStatusText(`Next pose: ${nextPoseName}\nStarting in ${waitSeconds}...`);
+                        
+                        if (waitTimerRef.current) clearInterval(waitTimerRef.current);
+                        
+                        waitTimerRef.current = setInterval(() => {
+                          waitSeconds--;
+                          if (waitSeconds <= 0) {
+                            clearInterval(waitTimerRef.current);
+                            waitTimerRef.current = null;
+                            isPausedRef.current = false;
+                            // AI 루프가 다시 돌면서 "Show ..." 텍스트로 업데이트됨
+                          } else {
+                            setStatusText(`Next pose: ${nextPoseName}\nStarting in ${waitSeconds}...`);
+                          }
+                        }, 1000);
+
+                        setIsShooting(false);
+                        isShootingRef.current = false;
+                      }
+                    }, 400);
+                  } else {
+                    cnt--;
+                    setCountdown(cnt);
+                  }
+                }, 1000);
               }
             } else {
               // 예측 요청 실패 시 기본 메시지 표시
@@ -262,58 +673,6 @@ export default function AiModePage() {
           // features가 없을 때 기본 메시지 표시
           setStatusText(`Show ${targetPose}\nDetected: - (-%)`);
           poseStableCountRef.current = 0;
-        }
-
-            if (poseStableCountRef.current >= AI_REQUIRED_STABLE && !isShootingRef.current) {
-              poseStableCountRef.current = 0;
-              setIsShooting(true);
-              isShootingRef.current = true;
-              let cnt = 3;
-              setCountdown(cnt);
-              setStatusText("Pose confirmed!\nTaking photo in 3 seconds");
-              countdownTimerRef.current = setInterval(() => {
-                if (cnt <= 1) {
-                  clearInterval(countdownTimerRef.current);
-                  countdownTimerRef.current = null;
-                  setCountdown(0);
-                  setStatusText("Click");
-                  setTimeout(() => {
-                    setIsFlashing(true);
-                    const imageSrc = webcamRef.current.getScreenshot();
-                    setTimeout(() => setIsFlashing(false), 150);
-                    setCapturedPhotos(prev => {
-                      const newPhotos = [...prev, imageSrc];
-                      const newLen = newPhotos.length;
-                      if (newLen >= 4 || aiTargetIndexRef.current >= AI_POSES.length - 1) {
-                        setStatusText("Capture Complete");
-                        setIsShooting(false);
-                        isShootingRef.current = false;
-                        setAiTargetIndex(AI_POSES.length);
-                        aiTargetIndexRef.current = AI_POSES.length;
-                        setTimeout(() => {
-                          navigate('/select-frame', { state: { photos: newPhotos } });
-                        }, 800);
-                      } else {
-                        const nextIdx = aiTargetIndexRef.current + 1;
-                        setAiTargetIndex(nextIdx);
-                        aiTargetIndexRef.current = nextIdx;
-                        setStatusText("Get ready for the next pose");
-                        setIsShooting(false);
-                        isShootingRef.current = false;
-                      }
-                      return newPhotos;
-                    });
-                  }, 400);
-                } else {
-                  cnt--;
-                  setCountdown(cnt);
-                }
-              }, 1000);
-            }
-          } else {
-            const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }));
-            setStatusText(`Error: ${errorData.detail || 'Server connection failed'}\nPlease check if the backend is running`);
-          }
         }
       } catch (e) {
         console.error('AI 루프 에러', e);
@@ -351,6 +710,9 @@ export default function AiModePage() {
     return () => {
       if (countdownTimerRef.current) {
         clearInterval(countdownTimerRef.current);
+      }
+      if (waitTimerRef.current) {
+        clearInterval(waitTimerRef.current);
       }
       if (aiLoopRafRef.current) {
         cancelAnimationFrame(aiLoopRafRef.current);

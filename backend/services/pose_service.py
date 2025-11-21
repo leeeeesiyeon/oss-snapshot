@@ -69,23 +69,71 @@ def train_model():
         X_train = []
         y_train = []
         
-        # features 길이 확인 및 필터링
-        expected_length = None
+        # 포즈별 기대 feature 길이 정의 (새로운 feature 형식)
+        # Wink: Face keypoints + 4개 (leftEyeEAR, rightEyeEAR, leftEyeClosed, rightEyeClosed)
+        # Close up: Face keypoints + 1개 (bodyKeypointsCount)
+        # V sign: Hand keypoints만 (변경 없음)
+        # Surprise: Body + Face keypoints (변경 없음)
+        # Background: Body + Face + Hand keypoints (변경 없음)
+        
+        # 포즈별 최대 feature 길이 찾기 (기존 데이터와 새 데이터 모두 고려)
+        pose_max_lengths = {}
         for label, features_list in pose_data_db.items():
+            max_len = 0
+            for features in features_list:
+                if isinstance(features, list) and len(features) > 0:
+                    max_len = max(max_len, len(features))
+            pose_max_lengths[label] = max_len
+        
+        # 포즈별로 기대하는 feature 길이 설정
+        pose_expected_lengths = {}
+        for label, max_len in pose_max_lengths.items():
+            if label == "Wink":
+                # Wink는 +4개 추가 (눈 감음 상태)
+                pose_expected_lengths[label] = max_len + 4 if max_len < 1000 else max_len
+            elif label == "Close up":
+                # Close up은 +1개 추가 (Body keypoints 개수)
+                pose_expected_lengths[label] = max_len + 1 if max_len < 1000 else max_len
+            else:
+                # 다른 포즈는 기존 길이 유지
+                pose_expected_lengths[label] = max_len
+        
+        # 모든 포즈의 최대 길이로 통일 (K-NN은 모든 샘플이 같은 길이여야 함)
+        global_max_length = max(pose_expected_lengths.values()) if pose_expected_lengths else 0
+        
+        print(f"[Training] 포즈별 기대 feature 길이: {pose_expected_lengths}")
+        print(f"[Training] 전역 최대 feature 길이: {global_max_length}")
+        
+        # 데이터 변환 및 정규화
+        for label, features_list in pose_data_db.items():
+            expected_len = pose_expected_lengths.get(label, global_max_length)
+            
             for features in features_list:
                 if not isinstance(features, list) or len(features) == 0:
                     continue
                 
-                # 첫 번째 features의 길이를 기준으로 설정
-                if expected_length is None:
-                    expected_length = len(features)
+                # feature 길이 조정
+                adjusted_features = list(features)
                 
-                # 길이가 다른 features는 스킵
-                if len(features) != expected_length:
-                    print(f"Warning: Skipping features with length {len(features)} (expected {expected_length})")
-                    continue
+                # 포즈별로 필요한 추가 feature 추가
+                if label == "Wink":
+                    # 기존 데이터면 0으로 패딩, 새 데이터면 그대로
+                    if len(adjusted_features) < expected_len:
+                        # 기존 데이터: 0으로 패딩 (눈 감음 상태 정보 없음)
+                        adjusted_features.extend([0.0] * (expected_len - len(adjusted_features)))
+                elif label == "Close up":
+                    # 기존 데이터면 0으로 패딩, 새 데이터면 그대로
+                    if len(adjusted_features) < expected_len:
+                        # 기존 데이터: 0으로 패딩 (Body keypoints 개수 정보 없음)
+                        adjusted_features.extend([0.0] * (expected_len - len(adjusted_features)))
                 
-                X_train.append(features)
+                # 전역 최대 길이로 패딩 (모든 포즈가 같은 길이여야 함)
+                if len(adjusted_features) < global_max_length:
+                    adjusted_features.extend([0.0] * (global_max_length - len(adjusted_features)))
+                elif len(adjusted_features) > global_max_length:
+                    adjusted_features = adjusted_features[:global_max_length]
+                
+                X_train.append(adjusted_features)
                 y_train.append(label)
         
         if len(X_train) < 3:
@@ -134,6 +182,8 @@ def train_model():
         else:
             # 2개 이상 포즈가 있는 경우: 기존 K-NN 분류기 사용
             # K 값 조정: 샘플 수가 적으면 k를 줄이고, 많으면 늘림
+            global classifier  # 전역 변수 사용
+            
             n_samples = len(X_train)
             n_poses = unique_poses
             
@@ -236,13 +286,14 @@ def predict_pose(features: List[float]) -> Dict[str, any]:
                     expected_features = len(features)
             
             # feature 개수가 다르면 조정
-            if len(features) != expected_features:
-                if len(features) > expected_features:
-                    # feature가 더 많으면 앞에서부터 자르기
-                    features = features[:expected_features]
-                else:
-                    # feature가 적으면 0으로 패딩
-                    features = features + [0.0] * (expected_features - len(features))
+            # 예측 시에는 항상 최대 길이로 패딩 (학습 시와 동일하게)
+            if len(features) < expected_features:
+                # feature가 적으면 0으로 패딩 (기존 데이터 형식 지원)
+                features = features + [0.0] * (expected_features - len(features))
+            elif len(features) > expected_features:
+                # feature가 더 많으면 앞에서부터 자르기 (예상치 못한 경우)
+                print(f"Warning: Input features ({len(features)}) longer than expected ({expected_features}), truncating")
+                features = features[:expected_features]
             
             # 학습 시와 동일하게 정규화 적용 (중요!)
             features_array = np.array([features])
