@@ -220,8 +220,6 @@ export default function AiModePage() {
         // 디버깅 정보
         console.log(`[${targetPose} Feature] Body: ${bodyKeypointsCount}, Face: ${faceKeypointsCount}, Hand: ${handKeypointsCount}, Total: ${features.length}`);
         
-        const targetPose = AI_POSES[aiTargetIndexRef.current];
-        
         // features가 있으면 예측 요청
         if (features.length > 0) {
           try {
