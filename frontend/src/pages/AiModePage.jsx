@@ -55,8 +55,8 @@ export default function AiModePage() {
           modelBasePath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
           backend: 'webgl',
           modelPath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/',
-          face: { enabled: false },
-          hand: { enabled: false },
+          face: { enabled: true },  // 학습 시와 동일하게 활성화
+          hand: { enabled: true },  // 학습 시와 동일하게 활성화
           object: { enabled: false },
           segmentation: { enabled: false },
           body: { enabled: true },
@@ -81,16 +81,128 @@ export default function AiModePage() {
 
       try {
         const result = await detectorRef.current.detect(video);
+        
+        // 학습할 때와 동일한 방식으로 features 추출
+        let features = [];
+        
+        // Body keypoints 추출 (학습 시와 동일)
         if (result.body && result.body.length > 0) {
-          const pose = result.body[0];
-          const keypoints = pose.keypoints || [];
-          const features = [];
-          // Human.js는 17개 keypoints를 사용 (MoveNet과 동일한 구조)
-          for (let kp of keypoints) {
-            features.push((kp.x ?? 0) / videoConstraints.width);
-            features.push((kp.y ?? 0) / videoConstraints.height);
+          const body = result.body[0];
+          let keypoints = [];
+          
+          if (Array.isArray(body.keypoints) && body.keypoints.length > 0) {
+            keypoints = body.keypoints;
+          } else if (Array.isArray(body.pose) && body.pose.length > 0) {
+            keypoints = body.pose;
+          } else {
+            for (const key in body) {
+              if (Array.isArray(body[key]) && body[key].length > 0) {
+                const firstItem = body[key][0];
+                if (firstItem && (firstItem.x !== undefined || firstItem[0] !== undefined)) {
+                  keypoints = body[key];
+                  break;
+                }
+              }
+            }
           }
-
+          
+          // Body 키포인트를 features 배열로 변환 (정규화 없이 원본 좌표 사용)
+          for (const kp of keypoints) {
+            if (!kp) continue;
+            
+            let x = null, y = null;
+            if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+              x = kp.position[0];
+              y = kp.position[1];
+            } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+              x = kp.positionRaw[0];
+              y = kp.positionRaw[1];
+            } else if (kp.x !== undefined && kp.y !== undefined) {
+              x = kp.x;
+              y = kp.y;
+            } else if (Array.isArray(kp) && kp.length >= 2) {
+              x = kp[0];
+              y = kp[1];
+            }
+            
+            if (x !== null && y !== null) {
+              features.push(x);
+              features.push(y);
+            }
+          }
+        }
+        
+        // Face keypoints 추출 (학습 시와 동일)
+        if (result.face && result.face.length > 0) {
+          const face = result.face[0];
+          if (face.keypoints && Array.isArray(face.keypoints)) {
+            for (const kp of face.keypoints) {
+              if (!kp) continue;
+              
+              let x = null, y = null;
+              if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+                x = kp.position[0];
+                y = kp.position[1];
+              } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+                x = kp.positionRaw[0];
+                y = kp.positionRaw[1];
+              } else if (kp.x !== undefined && kp.y !== undefined) {
+                x = kp.x;
+                y = kp.y;
+              } else if (Array.isArray(kp) && kp.length >= 2) {
+                x = kp[0];
+                y = kp[1];
+              }
+              
+              if (x !== null && y !== null) {
+                features.push(x);
+                features.push(y);
+              }
+            }
+          }
+        }
+        
+        // Hand keypoints 추출 (학습 시와 동일)
+        if (result.hand && result.hand.length > 0) {
+          for (const hand of result.hand) {
+            let handKeypoints = [];
+            
+            if (hand.keypoints && Array.isArray(hand.keypoints)) {
+              handKeypoints = hand.keypoints;
+            } else if (hand.landmarks && Array.isArray(hand.landmarks)) {
+              handKeypoints = hand.landmarks;
+            } else if (hand.points && Array.isArray(hand.points)) {
+              handKeypoints = hand.points;
+            }
+            
+            for (const kp of handKeypoints) {
+              if (!kp) continue;
+              
+              let x = null, y = null;
+              if (kp.position && Array.isArray(kp.position) && kp.position.length >= 2) {
+                x = kp.position[0];
+                y = kp.position[1];
+              } else if (kp.positionRaw && Array.isArray(kp.positionRaw) && kp.positionRaw.length >= 2) {
+                x = kp.positionRaw[0];
+                y = kp.positionRaw[1];
+              } else if (kp.x !== undefined && kp.y !== undefined) {
+                x = kp.x;
+                y = kp.y;
+              } else if (Array.isArray(kp) && kp.length >= 2) {
+                x = kp[0];
+                y = kp[1];
+              }
+              
+              if (x !== null && y !== null) {
+                features.push(x);
+                features.push(y);
+              }
+            }
+          }
+        }
+        
+        // features가 있으면 예측 요청
+        if (features.length > 0) {
           const res = await fetch("http://127.0.0.1:8000/api/predict", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
