@@ -7,6 +7,7 @@ load_dotenv()
 # CORS 설정
 CORS_ORIGINS = [
     "http://localhost:5173",  # React(Vite) 개발 서버 주소
+    "http://127.0.0.1:5173",  # 일부 환경에서는 127.0.0.1로 동작
 ]
 
 # 파일 경로 설정

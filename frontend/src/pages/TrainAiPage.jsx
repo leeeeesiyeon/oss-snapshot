@@ -39,6 +39,10 @@ export default function TrainAiPage() {
   const [statusText, setStatusText] = useState("Loading AI model...");
   const [poseName, setPoseName] = useState("Wink");
   const [poseCounts, setPoseCounts] = useState({});
+  const [leftEyeOpen, setLeftEyeOpen] = useState(true);
+  const [rightEyeOpen, setRightEyeOpen] = useState(true);
+  const [leftEyePos, setLeftEyePos] = useState({ x: 0, y: 0 });
+  const [rightEyePos, setRightEyePos] = useState({ x: 0, y: 0 });
   useEffect(() => {
     const load = async () => {
       try {
@@ -244,10 +248,13 @@ export default function TrainAiPage() {
       const face = result.face[0];
       let faceKeypoints = [];
       
+      // Human.js의 다양한 얼굴 랜드마크 형식 지원
       if (face.keypoints && Array.isArray(face.keypoints)) {
         faceKeypoints = face.keypoints;
       } else if (face.landmarks && Array.isArray(face.landmarks)) {
         faceKeypoints = face.landmarks;
+      } else if (face.mesh && Array.isArray(face.mesh)) {
+        faceKeypoints = face.mesh;
       }
       
       // 얼굴 keypoints 점 그리기
@@ -294,6 +301,121 @@ export default function TrainAiPage() {
             }
           }
         };
+        
+        // 눈 깜빡임 감지 함수 (MediaPipe 얼굴 랜드마크 인덱스 사용)
+        const detectEyeState = (eyeIndices) => {
+          // 눈 영역의 모든 keypoints 가져오기
+          const eyePoints = [];
+          
+          for (const idx of eyeIndices) {
+            // 인덱스가 배열 범위 내에 있는지 확인
+            if (idx >= 0 && idx < faceKeypoints.length && faceKeypoints[idx] !== undefined && faceKeypoints[idx] !== null) {
+              const coords = getKeypointCoords(faceKeypoints[idx]);
+              if (coords && coords.x > 0 && coords.y > 0 && coords.x < videoWidth && coords.y < videoHeight) {
+                eyePoints.push(coords);
+              }
+            }
+          }
+          
+          if (eyePoints.length < 4) {
+            return { isOpen: true, center: { x: 0, y: 0 } };
+          }
+          
+          // 눈의 최상단, 최하단, 최좌측, 최우측 좌표 찾기
+          let minY = Infinity, maxY = -Infinity;
+          let minX = Infinity, maxX = -Infinity;
+          
+          for (const point of eyePoints) {
+            if (point.y < minY) minY = point.y;
+            if (point.y > maxY) maxY = point.y;
+            if (point.x < minX) minX = point.x;
+            if (point.x > maxX) maxX = point.x;
+          }
+          
+          // 눈의 세로 길이와 가로 길이
+          const eyeHeight = maxY - minY;
+          const eyeWidth = maxX - minX;
+          
+          // 눈의 중심 좌표
+          const eyeCenterX = (minX + maxX) / 2;
+          const eyeCenterY = (minY + maxY) / 2;
+          
+          // 눈의 세로/가로 비율 계산 (EAR: Eye Aspect Ratio)
+          // 비율이 0.15 이하이면 눈이 감긴 것으로 판단
+          // 눈이 떴을 때는 보통 0.2~0.3 정도, 감았을 때는 0.1 이하
+          const eyeAspectRatio = eyeWidth > 0 ? eyeHeight / eyeWidth : 1;
+          const isOpen = eyeAspectRatio > 0.15;
+          
+          return { isOpen, center: { x: eyeCenterX, y: eyeCenterY } };
+        };
+        
+        // Human.js의 face 객체에서 직접 눈 정보 가져오기 시도
+        let leftEyeState = { isOpen: true, center: { x: 0, y: 0 } };
+        let rightEyeState = { isOpen: true, center: { x: 0, y: 0 } };
+        
+        // 방법 1: face 객체에 직접 눈 정보가 있는지 확인
+        if (face.leftEye && Array.isArray(face.leftEye) && face.leftEye.length > 0) {
+          // Human.js가 직접 눈 정보를 제공하는 경우
+          const leftEyePoints = face.leftEye.map(kp => getKeypointCoords(kp)).filter(c => c);
+          if (leftEyePoints.length > 0) {
+            let minY = Math.min(...leftEyePoints.map(p => p.y));
+            let maxY = Math.max(...leftEyePoints.map(p => p.y));
+            let minX = Math.min(...leftEyePoints.map(p => p.x));
+            let maxX = Math.max(...leftEyePoints.map(p => p.x));
+            const eyeHeight = maxY - minY;
+            const eyeWidth = maxX - minX;
+            const eyeAspectRatio = eyeWidth > 0 ? eyeHeight / eyeWidth : 1;
+            leftEyeState = {
+              isOpen: eyeAspectRatio > 0.15,
+              center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+            };
+          }
+        } else {
+          // 방법 2: MediaPipe 얼굴 랜드마크 인덱스 사용
+          const leftEyeIndices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
+          leftEyeState = detectEyeState(leftEyeIndices);
+        }
+        
+        if (face.rightEye && Array.isArray(face.rightEye) && face.rightEye.length > 0) {
+          const rightEyePoints = face.rightEye.map(kp => getKeypointCoords(kp)).filter(c => c);
+          if (rightEyePoints.length > 0) {
+            let minY = Math.min(...rightEyePoints.map(p => p.y));
+            let maxY = Math.max(...rightEyePoints.map(p => p.y));
+            let minX = Math.min(...rightEyePoints.map(p => p.x));
+            let maxX = Math.max(...rightEyePoints.map(p => p.x));
+            const eyeHeight = maxY - minY;
+            const eyeWidth = maxX - minX;
+            const eyeAspectRatio = eyeWidth > 0 ? eyeHeight / eyeWidth : 1;
+            rightEyeState = {
+              isOpen: eyeAspectRatio > 0.15,
+              center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+            };
+          }
+        } else {
+          const rightEyeIndices = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
+          rightEyeState = detectEyeState(rightEyeIndices);
+        }
+        
+        // 눈 상태를 state에 업데이트
+        setLeftEyeOpen(leftEyeState.isOpen);
+        setRightEyeOpen(rightEyeState.isOpen);
+        if (leftEyeState.center.x > 0 && leftEyeState.center.y > 0) {
+          setLeftEyePos(leftEyeState.center);
+        }
+        if (rightEyeState.center.x > 0 && rightEyeState.center.y > 0) {
+          setRightEyePos(rightEyeState.center);
+        }
+        
+        // 눈 상태 즉시 표시 (빨간색: 눈 뜸, 흰색: 눈 감음)
+        if (leftEyeState.center.x > 0 && leftEyeState.center.y > 0) {
+          const eyeColor = leftEyeState.isOpen ? "rgba(255, 0, 0, 1)" : "rgba(255, 255, 255, 1)";
+          drawKeypoint(leftEyeState.center.x, leftEyeState.center.y, eyeColor, 12);
+        }
+        
+        if (rightEyeState.center.x > 0 && rightEyeState.center.y > 0) {
+          const eyeColor = rightEyeState.isOpen ? "rgba(255, 0, 0, 1)" : "rgba(255, 255, 255, 1)";
+          drawKeypoint(rightEyeState.center.x, rightEyeState.center.y, eyeColor, 12);
+        }
         
         // 간단하게 모든 얼굴 keypoints를 점으로 표시
         // Human.js의 얼굴 keypoints는 보통 468개이므로 모두 점으로 표시
