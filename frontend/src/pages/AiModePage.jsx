@@ -319,8 +319,9 @@ export default function AiModePage() {
             let confidence = 0;
             let requestSuccess = false;
 
-            // 1. Wink 포즈: 상호 필수 (AND Condition)
-            // 모델도 "Wink"라고 해야 하고, 실제로 눈도 깜빡여야 인정
+            // 1. Wink 포즈: 점수제 (실시간 70점 + AI 30점)
+            // AI 신뢰도(0~1.0)를 30점 만점으로 환산 + 윙크 감지되면 70점 = 총점 100점
+            // 합격 기준: 80점 이상
             if (targetPose === "Wink") {
               // 1차: AI 모델 예측 시도
               const res = await fetch("http://127.0.0.1:8000/api/predict", {
@@ -331,21 +332,38 @@ export default function AiModePage() {
 
               if (res.ok) {
                 const json = await res.json();
-                predicted = json.pose;
-                confidence = json.confidence ?? 0;
+                predicted = json.pose; // AI가 예측한 포즈 이름
+                const aiRawConfidence = json.confidence ?? 0; // AI 원본 신뢰도 (0.0 ~ 1.0)
                 
-                // 2차: 눈 상태 검증 (규칙 기반)
+                // 점수 계산 시작
+                let totalScore = 0;
+
+                // [점수 1] 실시간 규칙 점수 (70점 만점)
                 const isEyeWinking = leftEyeClosed !== rightEyeClosed;
-                
-                // [변경] 상호 필수 조건: 모델도 Wink여야 하고, 눈도 감아야 함
+                if (isEyeWinking) {
+                  totalScore += 70;
+                }
+
+                // [점수 2] AI 모델 점수 (30점 만점)
+                // AI가 "Wink"라고 했을 때만 점수 부여
                 if (predicted === "Wink") {
-                  if (!isEyeWinking) {
-                    // 모델은 윙크라는데 실제 눈은 안 감았으면 탈락
-                    confidence = 0; 
-                  }
-                  // 눈도 감았으면 모델 신뢰도 그대로 유지 (합격)
+                  // 원본 신뢰도(0.0~1.0)를 30점 만점으로 변환
+                  totalScore += aiRawConfidence * 30;
+                } else if (predicted === "Close up") {
+                  // [추가] AI가 "Close up"으로 오인식하는 경우 부분 점수 (20점 만점)
+                  // 윙크를 하려고 얼굴을 가까이 대면 AI가 Close up으로 착각하기 쉬움
+                  // 이 경우 AI 신뢰도가 50%만 넘어도 10점을 획득하여, 눈 감음(70점)과 합쳐 80점 통과 가능
+                  totalScore += aiRawConfidence * 20;
+                }
+
+                // 최종 판단: 80점 넘으면 합격
+                if (totalScore >= 80) {
+                  predicted = "Wink";
+                  // AI_CONF_THRESHOLD(0.67)를 넘기기 위해 신뢰도를 높게 설정
+                  // 점수가 높을수록 1.0에 가깝게, 80점이면 0.8 정도로 매핑
+                  confidence = 0.8 + ((totalScore - 80) / 20) * 0.2; 
                 } else {
-                  // 모델이 윙크 아니라고 하면, 눈 감았어도 탈락
+                  // 불합격이면 신뢰도를 0으로
                   confidence = 0;
                 }
                 
@@ -464,22 +482,18 @@ export default function AiModePage() {
                   }
                 }
 
-                // [Surprise] 나홀로 집에 표정 검증
-                // 1. 입이 벌어져 있어야 함 (입 높이 확인)
-                // 2. 손이나 손목이 얼굴 주변에 있어야 함
+                // [Surprise] 나홀로 집에 표정 검증 (점수제: 실시간 50점 + AI 50점)
+                // 실시간: 입 벌림 확인 (50점)
+                // AI: "Surprise"라고 하면 50점
+                // 합격 기준: 80점 이상 (즉, 둘 다 만족해야 함. 하나라도 아니면 50점으로 탈락)
                 if (targetPose === "Surprise") {
                   let isMouthOpen = false;
-                  let isHandNearFace = false;
                   
                   // 1. 입 벌림 확인 (Face Mesh 기준)
                   if (result.face && result.face.length > 0) {
                     const face = result.face[0];
                     const kp = face.keypoints || face.landmarks || face.mesh;
                     if (kp && kp.length > 0) {
-                       // 입 윗입술(13)과 아랫입술(14) 사이 거리 (MediaPipe 468 랜드마크 기준)
-                       // 인덱스가 다를 수 있으므로 Human.js의 mesh/landmarks 구조에 따라 접근
-                       // 간단하게 입 위(13), 아래(14) 인덱스 사용 (없으면 좌표값으로 추정)
-                       
                        const getKeypoint = (idx) => {
                          if (kp[idx]) {
                            const p = kp[idx];
@@ -493,7 +507,6 @@ export default function AiModePage() {
                        const upperLip = getKeypoint(13);
                        const lowerLip = getKeypoint(14);
                        
-                       // 얼굴 크기 정규화를 위한 코 높이(1)와 턱(152) 거리
                        const nose = getKeypoint(1);
                        const chin = getKeypoint(152);
                        
@@ -502,70 +515,34 @@ export default function AiModePage() {
                          const faceHeight = Math.abs(chin.y - nose.y);
                          
                          // 입 높이가 얼굴 높이의 일정 비율 이상이면 입 벌림으로 간주
-                         if (faceHeight > 0 && (mouthHeight / faceHeight) > 0.03) { // 0.05 -> 0.03 (조금만 벌려도 인정)
+                         // 0.03 -> 0.015 (아주 조금만 벌려도 인정, 입술이 살짝만 떨어져도 OK)
+                         if (faceHeight > 0 && (mouthHeight / faceHeight) > 0.015) { 
                            isMouthOpen = true;
                          }
                        }
                     }
                   }
                   
-                  // 2. 손이 얼굴 근처에 있는지 확인
-                  // 얼굴 영역(Bounding Box) 구하기
-                  let faceBox = null;
-                  if (result.face && result.face.length > 0) {
-                    const face = result.face[0];
-                    // boxRaw: [x, y, width, height] (0~1 정규화 좌표일 수도 있음)
-                    if (face.boxRaw) {
-                      faceBox = {
-                         minX: face.boxRaw[0],
-                         minY: face.boxRaw[1],
-                         maxX: face.boxRaw[0] + face.boxRaw[2],
-                         maxY: face.boxRaw[1] + face.boxRaw[3]
-                      };
-                    }
+                  // 점수 계산
+                  let totalScore = 0;
+                  
+                  // [점수 1] 실시간 입 벌림 점수 (50점)
+                  if (isMouthOpen) {
+                    totalScore += 50;
                   }
                   
-                  if (faceBox && result.hand && result.hand.length > 0) {
-                    for (const hand of result.hand) {
-                       const kp = hand.keypoints || hand.landmarks;
-                       if (!kp) continue;
-                       
-                       // 손의 모든 포인트 중 하나라도 얼굴 영역 주변에 있으면 인정
-                       // 얼굴 영역을 조금 확장 (위아래좌우 20% 정도)
-                       const marginX = (faceBox.maxX - faceBox.minX) * 0.3;
-                       const marginY = (faceBox.maxY - faceBox.minY) * 0.3;
-                       
-                       const expandedBox = {
-                         minX: faceBox.minX - marginX,
-                         maxX: faceBox.maxX + marginX,
-                         minY: faceBox.minY - marginY,
-                         maxY: faceBox.maxY + marginY
-                       };
-                       
-                       // 손목(0)이나 검지끝(8) 등이 얼굴 박스 안에 들어오는지 확인
-                       // 좌표계가 통일되어 있어야 함 (보통 0~width, 0~height 픽셀 좌표)
-                       // Human.js 결과값은 보통 픽셀 좌표
-                       
-                       for (let i = 0; i < Math.min(kp.length, 21); i += 4) { // 주요 포인트만 검사
-                          const p = kp[i];
-                          const x = p.x || p[0] || 0;
-                          const y = p.y || p[1] || 0;
-                          
-                          if (x >= expandedBox.minX && x <= expandedBox.maxX &&
-                              y >= expandedBox.minY && y <= expandedBox.maxY) {
-                            isHandNearFace = true;
-                            break;
-                          }
-                       }
-                       if (isHandNearFace) break;
-                    }
+                  // [점수 2] AI 모델 점수 (50점)
+                  if (predicted === "Surprise") {
+                    totalScore += 50;
                   }
                   
-                  // 규칙 적용: 입이 안 벌어졌거나 손이 얼굴 근처에 없으면 탈락
-                  // 단, 모델이 이미 Surprise라고 했으면, 규칙 중 하나만 만족해도 인정해주는 관대함 적용?
-                  // 아니면 엄격하게 둘 다 만족해야 함? -> 요청사항: "입을 조금 벌리고, 한손목이라도 얼굴 근처에 가있어야됨" (AND 조건)
-                  if (!isMouthOpen || !isHandNearFace) {
-                    confidence = 0; // 조건 불만족 시 탈락
+                  // 합격 기준: 80점 이상 (즉, 입도 벌리고 AI도 Surprise라고 해야 함)
+                  // 하나라도 불만족하면 50점이므로 탈락
+                  if (totalScore >= 80) {
+                    // 합격 시 신뢰도 보정 (0.8 이상으로)
+                    confidence = 0.8 + ((totalScore - 80) / 20) * 0.2;
+                  } else {
+                    confidence = 0; // 탈락
                   }
                 }
               }
