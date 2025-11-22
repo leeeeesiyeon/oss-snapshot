@@ -6,6 +6,7 @@ import frameBlack from '../assets/images/frames/frame_black.png';
 import frameRed from '../assets/images/frames/frame_red.png';
 import frameWhite from '../assets/images/frames/frame_white.png';
 import saveButton from '../assets/images/save_button.svg';
+import gotohomeButton from '../assets/images/gotohome_button.svg';
 import barSvg from '../assets/images/_bar.svg';
 
 // 네컷 출력/저장 페이지
@@ -511,6 +512,50 @@ export default function PrintPage() {
           <img
             src={saveButton}
             alt="Save"
+            style={{
+              display: 'block',
+              width: '200px',
+              height: 'auto',
+              objectFit: 'contain'
+            }}
+          />
+        </button>
+
+        {/* GO TO HOME 버튼 (Save 버튼 아래에 배치) */}
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            backgroundColor: 'transparent',
+            display: 'inline-block',
+            opacity: 1,
+            zIndex: 10
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1.05)';
+            e.currentTarget.style.filter = 'grayscale(100%)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1)';
+            e.currentTarget.style.filter = 'grayscale(0%)';
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(0.95)';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1.05)';
+          }}
+        >
+          <img
+            src={gotohomeButton}
+            alt="Go to Home"
             style={{
               display: 'block',
               width: '200px',

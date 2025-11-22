@@ -319,13 +319,112 @@ def slim_lower_face(
 
 
 # =========================
-# 6. 메인 파이프라인
+# 6. 피부 보정 (얼굴 영역만 선택적 스무딩)
+# =========================
+
+def smooth_skin(
+    img: np.ndarray,
+    landmarks: np.ndarray,
+    strength: float = 0.5,
+    d: int = 9,
+    sigma_color: float = 75.0,
+    sigma_space: float = 75.0,
+) -> np.ndarray:
+    """
+    얼굴 영역만 선택적으로 피부 보정 (Bilateral 필터 사용)
+    
+    - strength: 보정 강도 (0.0 ~ 1.0, 기본 0.5)
+    - d: Bilateral 필터 직경 (기본 9)
+    - sigma_color: 색상 공간 표준편차 (기본 75.0)
+    - sigma_space: 좌표 공간 표준편차 (기본 75.0)
+    """
+    h, w, _ = img.shape
+    oval = landmarks[FACE_OVAL_IDX].astype(np.int32)
+    
+    # 얼굴 영역 마스크 생성
+    mask_face = np.zeros((h, w), dtype=np.float32)
+    cv2.fillConvexPoly(mask_face, oval, 1.0)
+    
+    # 눈과 입 영역은 제외 (약하게 보정)
+    # 왼쪽 눈 영역
+    left_eye_pts = landmarks[LEFT_EYE_IDX].astype(np.int32)
+    left_eye_rect = cv2.boundingRect(left_eye_pts)
+    eye_pad = int(max(left_eye_rect[2], left_eye_rect[3]) * 0.5)
+    left_eye_x1 = max(0, left_eye_rect[0] - eye_pad)
+    left_eye_y1 = max(0, left_eye_rect[1] - eye_pad)
+    left_eye_x2 = min(w, left_eye_rect[0] + left_eye_rect[2] + eye_pad)
+    left_eye_y2 = min(h, left_eye_rect[1] + left_eye_rect[3] + eye_pad)
+    
+    # 오른쪽 눈 영역
+    right_eye_pts = landmarks[RIGHT_EYE_IDX].astype(np.int32)
+    right_eye_rect = cv2.boundingRect(right_eye_pts)
+    eye_pad = int(max(right_eye_rect[2], right_eye_rect[3]) * 0.5)
+    right_eye_x1 = max(0, right_eye_rect[0] - eye_pad)
+    right_eye_y1 = max(0, right_eye_rect[1] - eye_pad)
+    right_eye_x2 = min(w, right_eye_rect[0] + right_eye_rect[2] + eye_pad)
+    right_eye_y2 = min(h, right_eye_rect[1] + right_eye_rect[3] + eye_pad)
+    
+    # 눈 영역 마스크 생성 (가우시안으로 부드럽게)
+    eye_mask = np.zeros((h, w), dtype=np.float32)
+    cv2.rectangle(eye_mask, (left_eye_x1, left_eye_y1), (left_eye_x2, left_eye_y2), 1.0, -1)
+    cv2.rectangle(eye_mask, (right_eye_x1, right_eye_y1), (right_eye_x2, right_eye_y2), 1.0, -1)
+    sigma_eye = max(w, h) * 0.02
+    ksize_eye = int(sigma_eye * 6) | 1  # 홀수로 만들기
+    if ksize_eye < 3:
+        ksize_eye = 3
+    eye_mask = cv2.GaussianBlur(eye_mask, (ksize_eye, ksize_eye), sigma_eye)
+    
+    # 입 영역 (랜드마크 12, 15, 16, 17, 18, 19, 20, 61, 84, 17, 314, 405, 320, 307, 375, 321, 308, 324, 318)
+    # 간단하게 턱 아래쪽 일부 영역 제외
+    chin_y = int(oval[:, 1].max())
+    mouth_y_start = int(chin_y - (chin_y - oval[:, 1].min()) * 0.3)
+    mouth_mask = np.zeros((h, w), dtype=np.float32)
+    mouth_mask[mouth_y_start:chin_y, :] = 1.0
+    sigma_mouth = max(w, h) * 0.015
+    ksize_mouth = int(sigma_mouth * 6) | 1
+    if ksize_mouth < 3:
+        ksize_mouth = 3
+    mouth_mask = cv2.GaussianBlur(mouth_mask, (ksize_mouth, ksize_mouth), sigma_mouth)
+    
+    # 최종 마스크: 얼굴 영역에서 눈과 입은 약하게 (30% 강도)
+    final_mask = mask_face.copy()
+    final_mask = final_mask * (1.0 - eye_mask * 0.7)  # 눈 영역은 30%만 적용
+    final_mask = final_mask * (1.0 - mouth_mask * 0.5)  # 입 영역은 50%만 적용
+    sigma_final = max(w, h) * 0.01
+    ksize_final = int(sigma_final * 6) | 1
+    if ksize_final < 3:
+        ksize_final = 3
+    final_mask = cv2.GaussianBlur(final_mask, (ksize_final, ksize_final), sigma_final)
+    final_mask = np.clip(final_mask, 0.0, 1.0)
+    
+    # Bilateral 필터로 스무딩 (텍스처 보존)
+    smoothed = cv2.bilateralFilter(img, d, sigma_color, sigma_space)
+    
+    # 원본과 블렌딩 (strength에 따라)
+    img_f = img.astype(np.float32)
+    smoothed_f = smoothed.astype(np.float32)
+    
+    # 마스크를 3채널로 확장
+    mask3 = final_mask[..., None]
+    
+    # 얼굴 영역만 선택적으로 블렌딩
+    blended = img_f * (1.0 - mask3 * strength) + smoothed_f * (mask3 * strength)
+    blended = np.clip(blended, 0, 255).astype(np.uint8)
+    
+    diff_skin = np.mean(np.abs(blended.astype(np.int32) - img.astype(np.int32)))
+    print(f"[smooth_skin] strength:{strength:.2f}, mask max:{final_mask.max():.3f}, mean diff:{diff_skin:.2f}")
+    
+    return blended
+
+
+# =========================
+# 7. 메인 파이프라인
 # =========================
 
 def retouch_image(image_data: bytes, filename: str) -> str:
     """
     1. FaceMesh 랜드마크 (한글 경로 우회 포함)
-    2. 눈 확대 + 하관 슬림
+    2. 눈 확대 + 하관 슬림 + 피부 보정 (얼굴 영역만 선택적 스무딩)
     3. Base64 data URL 반환
     """
     print(f"[retouch_image] Processing image: {filename}")
@@ -368,6 +467,17 @@ def retouch_image(image_data: bytes, filename: str) -> str:
             lower_start_ratio=0.55,
             extra_bottom_ratio=0.40,
             side_margin_ratio=0.15,
+        )
+
+        # 피부 보정 (얼굴 영역만 선택적 스무딩)
+        # strength: 0.5 = 50% 블렌딩 (0.0~1.0 조정 가능)
+        img_proc = smooth_skin(
+            img_proc,
+            landmarks,
+            strength=0.5,
+            d=9,
+            sigma_color=75.0,
+            sigma_space=75.0,
         )
 
         diff = np.mean(np.abs(img_proc.astype(np.int32) - img_array.astype(np.int32)))
