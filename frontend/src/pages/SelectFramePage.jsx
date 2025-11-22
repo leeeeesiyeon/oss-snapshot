@@ -12,6 +12,8 @@ import noneFilterButton from '../assets/images/none_filter_button.svg';
 import mutedButton from '../assets/images/muted_button.svg';
 import brightButton from '../assets/images/bright_button.svg';
 import grayscaleButton from '../assets/images/grayscale_button.svg';
+import retouchButton from '../assets/images/retouch_button.svg';
+import retouchOnButton from '../assets/images/retouch_on_button.svg';
 
 // 프레임 선택 페이지
 export default function SelectFramePage() {
@@ -420,7 +422,7 @@ export default function SelectFramePage() {
       {/* None 버튼 */}
       <div style={{ 
         position: 'absolute',
-        top: '300px',
+        top: '320px',
         left: 'calc(50% - 247.5px)',
         transform: 'translateX(-50%)',
         zIndex: 10
@@ -454,7 +456,7 @@ export default function SelectFramePage() {
       {/* Grayscale 버튼 */}
       <div style={{ 
         position: 'absolute',
-        top: '300px',
+        top: '320px',
         left: 'calc(50% - 82.5px)',
         transform: 'translateX(-50%)',
         zIndex: 10
@@ -488,7 +490,7 @@ export default function SelectFramePage() {
       {/* 흐리게 버튼 */}
       <div style={{ 
         position: 'absolute',
-        top: '300px',
+        top: '320px',
         left: 'calc(50% + 82.5px)',
         transform: 'translateX(-50%)',
         zIndex: 10
@@ -522,7 +524,7 @@ export default function SelectFramePage() {
       {/* Bright 버튼 */}
       <div style={{ 
         position: 'absolute',
-        top: '300px',
+        top: '320px',
         left: 'calc(50% + 247.5px)',
         transform: 'translateX(-50%)',
         zIndex: 10
@@ -553,13 +555,16 @@ export default function SelectFramePage() {
         </button>
       </div>
 
-      {/* AI 보정 버튼 */}
+      {/* AI 보정 버튼 - 필터 버튼 밑에 배치, 필터 버튼과 동일한 스타일 */}
       <div style={{ 
         position: 'absolute',
-        top: '300px',
-        left: 'calc(50% + 330px)',
+        top: '390px',
+        left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 10
+        zIndex: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center'
       }}>
         <button 
           onClick={handleRetouch}
@@ -570,38 +575,67 @@ export default function SelectFramePage() {
             backgroundColor: 'transparent',
             padding: 0,
             display: 'inline-block',
-            opacity: isProcessing ? 0.5 : (aiRetouch ? 1 : 0.5)
+            opacity: isProcessing ? 0.6 : (aiRetouch ? 1 : 0.8),
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            if (!isProcessing) {
+              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.filter = 'grayscale(100%)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isProcessing) {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.filter = 'grayscale(0%)';
+            }
+          }}
+          onMouseDown={(e) => {
+            if (!isProcessing) {
+              e.currentTarget.style.transform = 'scale(0.95)';
+            }
+          }}
+          onMouseUp={(e) => {
+            if (!isProcessing) {
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }
           }}
         >
-          <div style={{
-            width: '150px',
-            height: '60px',
-            backgroundColor: aiRetouch ? '#4CAF50' : '#f0f0f0',
-            borderRadius: '8px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: aiRetouch ? 'white' : '#333',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            boxShadow: aiRetouch ? '0 2px 8px rgba(76, 175, 80, 0.3)' : '0 2px 4px rgba(0,0,0,0.1)'
-          }}>
-            {isProcessing ? (
-              <>
-                <div>처리 중...</div>
-                {processingProgress.total > 0 && (
-                  <div style={{ fontSize: '10px', marginTop: '4px' }}>
-                    {processingProgress.current}/{processingProgress.total}
-                  </div>
-                )}
-              </>
-            ) : (
-              aiRetouch ? 'AI 보정 ON' : 'AI 보정 OFF'
-            )}
-          </div>
+          <img
+            src={aiRetouch ? retouchOnButton : retouchButton}
+            alt="AI Retouch"
+            style={{
+              display: 'block',
+              width: 'auto',
+              height: '57.75px', // print 버튼과 동일한 높이 (200/142 * 41)
+              objectFit: 'contain'
+            }}
+          />
         </button>
-        </div>
+        {/* 처리 중 표시 - 버튼 밑에 영어로 표시 */}
+        {isProcessing && processingProgress.total > 0 && (
+          <div style={{ 
+            marginTop: '8px',
+            fontSize: '14px',
+            color: '#666',
+            textAlign: 'center'
+          }}>
+            Processing {processingProgress.current}/{processingProgress.total}
+          </div>
+        )}
+        {/* 보정 완료 표시 */}
+        {!isProcessing && aiRetouch && retouchedPhotos.length > 0 && (
+          <div style={{ 
+            marginTop: '8px',
+            fontSize: '14px',
+            color: '#4CAF50',
+            textAlign: 'center',
+            fontWeight: '500'
+          }}>
+            Retouch completed!
+          </div>
+        )}
+      </div>
 
       {/* 선택된 프레임 미리보기 */}
       {selectedFrame && (
