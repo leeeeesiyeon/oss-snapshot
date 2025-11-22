@@ -579,56 +579,63 @@ export default function AiModePage() {
                     setStatusText("Click");
                     setTimeout(() => {
                       setIsFlashing(true);
-                      const imageSrc = webcamRef.current.getScreenshot();
-                      setTimeout(() => setIsFlashing(false), 150);
-                      
-                      // 사진 저장 및 다음 단계 진행 (부수 효과 분리)
-                      setCapturedPhotos(prev => {
-                        const newPhotos = [...prev, imageSrc];
-                        return newPhotos;
-                      });
-
-                      // 상태 업데이트를 별도로 수행 (ref 사용)
-                      const currentLen = capturedPhotosRef.current.length + 1;
-                      if (currentLen >= 4 || aiTargetIndexRef.current >= AI_POSES.length - 1) {
-                        setStatusText("Capture Complete");
-                        setIsShooting(false);
-                        isShootingRef.current = false;
-                        setAiTargetIndex(AI_POSES.length);
-                        aiTargetIndexRef.current = AI_POSES.length;
+                      setTimeout(() => {
+                        const imageSrc = webcamRef.current.getScreenshot();
                         setTimeout(() => {
-                          navigate('/select-frame', { state: { photos: [...capturedPhotosRef.current, imageSrc] } });
-                        }, 800);
-                      } else {
-                        const nextIdx = aiTargetIndexRef.current + 1;
-                        setAiTargetIndex(nextIdx);
-                        // ref 업데이트는 useEffect에서 처리되지만, 즉시 반영을 위해 여기서도 업데이트
-                        aiTargetIndexRef.current = nextIdx; 
-                        
-                        // 3초 대기 시간 추가 (포즈 준비 시간)
-                        isPausedRef.current = true;
-                        let waitSeconds = 3;
-                        const nextPoseName = AI_POSES[nextIdx];
-                        setStatusText(`Next pose: ${nextPoseName}\nStarting in ${waitSeconds}...`);
-                        
-                        if (waitTimerRef.current) clearInterval(waitTimerRef.current);
-                        
-                        waitTimerRef.current = setInterval(() => {
-                          waitSeconds--;
-                          if (waitSeconds <= 0) {
-                            clearInterval(waitTimerRef.current);
-                            waitTimerRef.current = null;
-                            isPausedRef.current = false;
-                            // AI 루프가 다시 돌면서 "Show ..." 텍스트로 업데이트됨
-                          } else {
-                            setStatusText(`Next pose: ${nextPoseName}\nStarting in ${waitSeconds}...`);
-                          }
-                        }, 1000);
+                          setIsFlashing(false);
+                          
+                          // 플래시 효과가 끝난 후 상태 업데이트
+                          setTimeout(() => {
+                            // 사진 저장 및 다음 단계 진행 (부수 효과 분리)
+                            setCapturedPhotos(prev => {
+                              const newPhotos = [...prev, imageSrc];
+                              return newPhotos;
+                            });
 
-                        setIsShooting(false);
-                        isShootingRef.current = false;
-                      }
-                    }, 400);
+                            // 상태 업데이트를 별도로 수행 (ref 사용)
+                            const currentLen = capturedPhotosRef.current.length + 1;
+                            if (currentLen >= 4 || aiTargetIndexRef.current >= AI_POSES.length - 1) {
+                              setStatusText("Capture Complete");
+                              setIsShooting(false);
+                              isShootingRef.current = false;
+                              setAiTargetIndex(AI_POSES.length);
+                              aiTargetIndexRef.current = AI_POSES.length;
+                              setTimeout(() => {
+                                navigate('/select-frame', { state: { photos: [...capturedPhotosRef.current, imageSrc] } });
+                              }, 800);
+                            } else {
+                            const nextIdx = aiTargetIndexRef.current + 1;
+                            setAiTargetIndex(nextIdx);
+                            // ref 업데이트는 useEffect에서 처리되지만, 즉시 반영을 위해 여기서도 업데이트
+                            aiTargetIndexRef.current = nextIdx; 
+                            
+                            // 3초 대기 시간 추가 (포즈 준비 시간)
+                            isPausedRef.current = true;
+                            let waitSeconds = 3;
+                            const nextPoseName = AI_POSES[nextIdx];
+                            setStatusText(`Next pose: ${nextPoseName}\nStarting in ${waitSeconds}...`);
+                            
+                            if (waitTimerRef.current) clearInterval(waitTimerRef.current);
+                            
+                            waitTimerRef.current = setInterval(() => {
+                              waitSeconds--;
+                              if (waitSeconds <= 0) {
+                                clearInterval(waitTimerRef.current);
+                                waitTimerRef.current = null;
+                                isPausedRef.current = false;
+                                // AI 루프가 다시 돌면서 "Show ..." 텍스트로 업데이트됨
+                              } else {
+                                setStatusText(`Next pose: ${nextPoseName}\nStarting in ${waitSeconds}...`);
+                              }
+                            }, 1000);
+
+                            setIsShooting(false);
+                            isShootingRef.current = false;
+                            }
+                          }, 300); // 플래시 효과가 끝난 후 300ms 지연
+                        }, 200);
+                      }, 50);
+                    }, 0);
                   } else {
                     cnt--;
                     setCountdown(cnt);

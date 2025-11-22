@@ -69,49 +69,57 @@ export default function NormalModePage() {
         
         setTimeout(() => {
           setIsFlashing(true);
-          const imageSrc = webcamRef.current.getScreenshot();
-          setTimeout(() => setIsFlashing(false), 150);
-          setCapturedPhotos(prevPhotos => {
-            const newPhotos = [...prevPhotos, imageSrc];
-            const newLength = newPhotos.length;
-            
-            if (newLength === 4) {
-              setStatusText("Capture Complete");
-              setIsShooting(false);
-              isShootingRef.current = false;
-              setCurrentPhotoNumber(5);
-              currentPhotoNumberRef.current = 5;
-              // 촬영 완료 후 프레임 선택 페이지로 이동
-              setTimeout(() => {
-                navigate('/select-frame', { state: { photos: newPhotos } });
-              }, 1000);
-            } else {
-              const nextNumber = newLength + 1;
-              setIsShooting(false);
-              isShootingRef.current = false;
-              setCurrentPhotoNumber(nextNumber);
-              currentPhotoNumberRef.current = nextNumber;
+          setTimeout(() => {
+            const imageSrc = webcamRef.current.getScreenshot();
+            setTimeout(() => {
+              setIsFlashing(false);
               
-              if (nextNumber <= 4) {
-                setStatusText("Get ready for the next shot...");
-                if (nextShotTimeoutRef.current) {
-                  clearTimeout(nextShotTimeoutRef.current);
-                }
-                nextShotTimeoutRef.current = setTimeout(() => {
-                  const currentPhotoCount = capturedPhotosRef.current.length;
-                  const currentNum = currentPhotoNumberRef.current;
-                  if (takeShotRef.current && currentNum === currentPhotoCount + 1 && currentPhotoCount < 4 && !isShootingRef.current) {
-                    takeShotRef.current();
+              // 플래시 효과가 끝난 후 상태 업데이트
+              setTimeout(() => {
+                setCapturedPhotos(prevPhotos => {
+                  const newPhotos = [...prevPhotos, imageSrc];
+                  const newLength = newPhotos.length;
+                  
+                  if (newLength === 4) {
+                    setStatusText("Capture Complete");
+                    setIsShooting(false);
+                    isShootingRef.current = false;
+                    setCurrentPhotoNumber(5);
+                    currentPhotoNumberRef.current = 5;
+                    // 촬영 완료 후 프레임 선택 페이지로 이동
+                    setTimeout(() => {
+                      navigate('/select-frame', { state: { photos: newPhotos } });
+                    }, 1000);
+                  } else {
+                    const nextNumber = newLength + 1;
+                    setIsShooting(false);
+                    isShootingRef.current = false;
+                    setCurrentPhotoNumber(nextNumber);
+                    currentPhotoNumberRef.current = nextNumber;
+                    
+                    if (nextNumber <= 4) {
+                      setStatusText("Get ready for the next shot...");
+                      if (nextShotTimeoutRef.current) {
+                        clearTimeout(nextShotTimeoutRef.current);
+                      }
+                      nextShotTimeoutRef.current = setTimeout(() => {
+                        const currentPhotoCount = capturedPhotosRef.current.length;
+                        const currentNum = currentPhotoNumberRef.current;
+                        if (takeShotRef.current && currentNum === currentPhotoCount + 1 && currentPhotoCount < 4 && !isShootingRef.current) {
+                          takeShotRef.current();
+                        }
+                        nextShotTimeoutRef.current = null;
+                      }, 2000);
+                    } else {
+                      setStatusText("Capture Complete");
+                    }
                   }
-                  nextShotTimeoutRef.current = null;
-                }, 2000);
-              } else {
-                setStatusText("Capture Complete");
-              }
-            }
-            
-            return newPhotos;
-          });
+                  
+                  return newPhotos;
+                });
+              }, 300); // 플래시 효과가 끝난 후 300ms 지연
+            }, 200);
+          }, 50);
         }, 500);
       } else {
         count--;
