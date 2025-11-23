@@ -19,7 +19,7 @@ import axios from 'axios';
 const CANVAS_WIDTH = 1440;
 const CANVAS_HEIGHT = 1080;
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const videoWidth = 640;
 const videoHeight = 480;
 const videoConstraints = { width: videoWidth, height: videoHeight, facingMode: "user" };
@@ -871,7 +871,6 @@ export default function TrainAiPage() {
             debugMsg += ` (Hand: ${hasHand ? 'detected' : 'not detected'})`;
           }
           setStatusText(debugMsg);
-          console.log(`[${poseName}] Body: ${hasBody}, Face: ${hasFace}, Hand: ${hasHand}, Features: ${features.length}`);
           await new Promise(resolve => setTimeout(resolve, 100));
           continue;
         }

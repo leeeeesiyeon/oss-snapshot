@@ -141,7 +141,8 @@ export default function SelectFramePage() {
             const timeoutId = setTimeout(() => controller.abort(), 60000);
             
             // 백엔드 API 호출
-            const retouchResponse = await fetch('http://127.0.0.1:8000/api/retouch-upload', {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+            const retouchResponse = await fetch(`${apiUrl}/api/retouch-upload`, {
               method: 'POST',
               body: formData,
               signal: controller.signal,
@@ -161,18 +162,15 @@ export default function SelectFramePage() {
             }
             
             enhancedPhotos.push(data.enhanced_image_url);
-            console.log(`사진 ${i + 1}/${photos.length} 보정 완료`);
           } catch (error) {
             if (error.name === 'AbortError') {
               throw new Error(`사진 ${i + 1} 처리 시간 초과 (60초)`);
             }
             console.error(`사진 ${i + 1} 보정 오류:`, error);
             
-            // Rate limit 오류(429)인 경우 재시도 로직
             const errorMessage = error.message || '';
             if (errorMessage.includes('429') || errorMessage.includes('throttled') || errorMessage.includes('rate limit')) {
-              console.log(`사진 ${i + 1} Rate limit 오류 감지. 15초 후 재시도...`);
-              await new Promise(resolve => setTimeout(resolve, 15000)); // 15초 대기
+              await new Promise(resolve => setTimeout(resolve, 15000));
               
               try {
                 // 재시도
@@ -206,7 +204,8 @@ export default function SelectFramePage() {
                 const retryController = new AbortController();
                 const retryTimeoutId = setTimeout(() => retryController.abort(), 60000);
                 
-                const retryResponse = await fetch('http://127.0.0.1:8000/api/retouch-upload', {
+                const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+                const retryResponse = await fetch(`${apiUrl}/api/retouch-upload`, {
                   method: 'POST',
                   body: retryFormData,
                   signal: retryController.signal,
@@ -218,8 +217,7 @@ export default function SelectFramePage() {
                   const retryData = await retryResponse.json();
                   if (retryData.enhanced_image_url) {
                     enhancedPhotos.push(retryData.enhanced_image_url);
-                    console.log(`사진 ${i + 1} 재시도 성공`);
-                    continue; // 다음 사진으로
+                    continue;
                   }
                 }
               } catch (retryError) {
@@ -596,23 +594,13 @@ export default function SelectFramePage() {
             }}
           />
         </button>
-        {/* 처리 중 표시 - 진행률 바 및 스피너 포함 */}
+        {/* 처리 중 표시 - 진행률 바 포함 */}
         {isProcessing && processingProgress.total > 0 && (
           <div style={{ 
             marginTop: '8px',
             width: '120px',
             textAlign: 'center'
           }}>
-            {/* 로딩 스피너 */}
-            <div style={{
-              width: '24px',
-              height: '24px',
-              margin: '0 auto 8px',
-              border: '3px solid #e0e0e0',
-              borderTop: '3px solid #4CAF50',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite'
-            }} />
             <div style={{ 
               fontSize: '8px',
               color: '#666',

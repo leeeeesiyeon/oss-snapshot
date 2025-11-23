@@ -314,9 +314,6 @@ export default function AiModePage() {
           }
         }
         
-        // 디버깅 정보
-        console.log(`[${targetPose} Feature] Body: ${bodyKeypointsCount}, Face: ${faceKeypointsCount}, Hand: ${handKeypointsCount}, Total: ${features.length}`);
-        
         // features가 있으면 예측 요청
         if (features.length > 0) {
           try {
@@ -329,7 +326,8 @@ export default function AiModePage() {
             // 합격 기준: 80점 이상
             if (targetPose === "Wink") {
               // 1차: AI 모델 예측 시도
-              const res = await fetch("http://127.0.0.1:8000/api/predict", {
+              const apiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+              const res = await fetch(`${apiUrl}/api/predict`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ features })
@@ -376,7 +374,8 @@ export default function AiModePage() {
               }
             } else {
               // 2. 그 외 포즈는 AI 모델 예측
-              const res = await fetch("http://127.0.0.1:8000/api/predict", {
+              const apiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+              const res = await fetch(`${apiUrl}/api/predict`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ features })
@@ -557,7 +556,6 @@ export default function AiModePage() {
               
               // 디버깅: feature 개수와 예측 결과 로그
               if (targetPose === "Close up") {
-                console.log(`[Close up] Features: ${features.length}, Predicted: ${predicted}, Confidence: ${(confidence*100).toFixed(1)}%`);
               }
               
               // 화면에 목표 포즈와 감지된 포즈, 신뢰도 표시
