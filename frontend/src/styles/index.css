@@ -9,14 +9,32 @@
       font-weight: 100;
     }
 
+    html {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
-      background-image: url('/all_background.svg');
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      background: url('/all_background.svg') center center no-repeat;
       background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      background-attachment: fixed;
+      background-attachment: scroll;
+      background-color: #000; /* fallback */
       color: #f5f5f5;
-      min-height: 100vh;
+    }
+
+    #root {
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      overflow-y: hidden;
     }
 
     @keyframes print-animation {
@@ -32,4 +50,150 @@
     
     .print-effect {
       animation: print-animation 1.5s ease-out forwards;
+    }
+
+    /* 성공 애니메이션 */
+    @keyframes scaleIn {
+      from {
+        transform: scale(0);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    @keyframes checkmark {
+      from {
+        transform: scale(0);
+      }
+      to {
+        transform: scale(1);
+      }
+    }
+
+    @keyframes drawCheck {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    /* 축하 효과 애니메이션 */
+    @keyframes confetti {
+      0% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(-100vh) rotate(720deg);
+        opacity: 0;
+      }
+    }
+
+    @keyframes celebrate {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.2);
+      }
+    }
+
+    /* 페이지 전환 페이드 효과 */
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    .page-fade {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    /* 펄스 효과 */
+    @keyframes pulse {
+      0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.8;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1.3);
+        opacity: 0;
+      }
+    }
+
+    /* 카운트다운 빛 효과 */
+    @keyframes countdownGlow {
+      0%, 100% {
+        box-shadow: 0 0 30px rgba(255, 255, 255, 0.6),
+                    0 0 60px rgba(255, 255, 255, 0.4),
+                    0 0 90px rgba(255, 255, 255, 0.2);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 50px rgba(255, 255, 255, 0.8),
+                    0 0 100px rgba(255, 255, 255, 0.6),
+                    0 0 150px rgba(255, 255, 255, 0.4);
+        transform: scale(1.05);
+      }
+    }
+
+    /* 스포트라이트 효과 */
+    @keyframes spotlight {
+      0% {
+        opacity: 0;
+      }
+      100% {
+        opacity: 1;
+      }
+    }
+
+    /* 프레임 조명 효과 */
+    @keyframes frameGlow {
+      0%, 100% {
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.3),
+                    inset 0 0 20px rgba(255, 255, 255, 0.1);
+      }
+      50% {
+        box-shadow: 0 0 40px rgba(255, 255, 255, 0.5),
+                    inset 0 0 30px rgba(255, 255, 255, 0.2);
+      }
+    }
+
+    /* 토스트 알림 애니메이션 */
+    @keyframes toastSlideIn {
+      from {
+        transform: translateX(-50%) translateY(-100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+    }
+
+    /* 로딩 스피너 */
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* 사진 슬라이드 효과 */
+    @keyframes slideIn {
+      from {
+        transform: translateX(-100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
     }

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import * as Human from '@vladmandic/human';
-import logoWhite from '../assets/images/logo_white.png';
 import cameraBox from '../assets/images/takepicture_camera_box.svg';
 import winkButton from '../assets/images/wink_button.svg';
 import vButton from '../assets/images/v_button.svg';
@@ -15,6 +14,10 @@ import traincountBox from '../assets/images/traincount_box.svg';
 import deleteButton from '../assets/images/delete_button.svg';
 import gotoHomeButton from '../assets/images/gotohome_button.svg';
 import axios from 'axios';
+
+// 고정 캔버스 크기 (background 이미지 크기에 맞춤)
+const CANVAS_WIDTH = 1440;
+const CANVAS_HEIGHT = 1080;
 
 const API_URL = "http://127.0.0.1:8000";
 const videoWidth = 640;
@@ -30,6 +33,9 @@ const POSE_BUTTON_MAP = {
   "Surprise": surpriseButton,
   "Background": backgroundButton
 };
+
+// Delete All Data 비밀번호 (환경 변수에서 가져오기)
+const DELETE_PASSWORD = import.meta.env.VITE_DELETE_PASSWORD || "DELETE";
 
 export default function TrainAiPage() {
   const navigate = useNavigate();
@@ -979,7 +985,20 @@ export default function TrainAiPage() {
     
     if (!firstConfirm) return;
     
-    // 두 번째 확인창
+    // 비밀번호 입력
+    const password = window.prompt(
+      "⚠️ This action cannot be undone!\n\n" +
+      "Please enter the password to delete all data:"
+    );
+    
+    if (password === null) return; // 취소 버튼을 누른 경우
+    
+    if (password !== DELETE_PASSWORD) {
+      alert("❌ Incorrect password. Deletion cancelled.");
+      return;
+    }
+    
+    // 최종 확인창
     const secondConfirm = window.confirm(
       "Are you sure you want to delete all data?\n\n" +
       "This action cannot be undone. All training data and models will be permanently deleted."
@@ -1002,51 +1021,54 @@ export default function TrainAiPage() {
 
   return (
     <div 
-      className="train-ai-page" 
+      className="train-ai-page page-fade" 
       style={{ 
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
+        width: '100%',
+        height: '100%',
         position: 'relative',
-        paddingBottom: '40px',
-        transform: 'scale(0.8)',
-        transformOrigin: 'center 5%'
+        overflowX: 'hidden',
+        overflowY: 'auto',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        paddingTop: '40px',
+        paddingBottom: '40px'
       }}
     >
-      {/* 배경 이미지 (중앙 배치) */}
+      {/* 캔버스 컨테이너 - 실제 크기 */}
       <div
         style={{
+          width: `${CANVAS_WIDTH}px`,
+          height: `${CANVAS_HEIGHT}px`,
           position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          width: '1200px',
-          height: '1500px'
+          flexShrink: 0,
+          margin: '0 auto'
         }}
       >
-        <img
-          src="/takepicture_1_2_background.svg"
-          alt="Background"
+        {/* Wrapper - 고정 크기 캔버스 */}
+        <div
           style={{
-            position: 'absolute',
-            width: '1200px',
-            height: '1500px',
-            objectFit: 'contain',
-            zIndex: 1
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            backgroundImage: 'url(/takepicture_1_2_background.svg)',
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center'
           }}
-        />
-        {/* 카메라 컨테이너 */}
+        >
+        {/* CameraBox */}
         <div
           style={{
             position: 'absolute',
-            width: '640px',
-            height: '480px',
-            top: '50%',
+            top: 'calc(50% - 340px)',
             left: '50%',
-            transform: 'translate(-50%, -50%) translateY(-230px)',
+            transform: 'translateX(-50%)',
+            width: '460.8px',
+            height: '345.6px',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
             zIndex: 5
           }}
         >
@@ -1070,10 +1092,10 @@ export default function TrainAiPage() {
               left: '50%',
               transform: 'translate(-50%, -50%)',
               zIndex: 2,
-              width: '640px',
-              height: '480px',
+              width: '460.8px',
+              height: '345.6px',
               overflow: 'hidden',
-              borderRadius: '10px'
+              borderRadius: '2px'
             }}
           >
             <Webcam
@@ -1086,7 +1108,7 @@ export default function TrainAiPage() {
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                borderRadius: '5px'
+                borderRadius: '1px'
               }}
           />
           <canvas
@@ -1116,7 +1138,7 @@ export default function TrainAiPage() {
             alignItems: 'center'
           }}
         >
-          <p className="webcam-status" style={{ position: 'absolute', top: 'calc(50% + 20px)', left: '50%', transform: 'translateX(-50%)', zIndex: 10, fontSize: '1rem', color: '#1a1a1a', fontWeight: 'bold' }}>
+          <p className="webcam-status" style={{ position: 'absolute', top: 'calc(50% + 14.4px)', left: '50%', transform: 'translateX(-50%)', zIndex: 10, fontSize: '0.72rem', color: '#1a1a1a', fontWeight: 'bold' }}>
             {statusText}
           </p>
       </div>
@@ -1125,28 +1147,28 @@ export default function TrainAiPage() {
         <div
           style={{
             position: 'absolute',
-            top: 'calc(50% + 70px)',
+            top: 'calc(50% + 50.4px)',
             left: '50%',
             transform: 'translateX(-50%)',
             display: 'flex',
-            gap: '30px',
+            gap: '21.6px',
             zIndex: 10
           }}
         >
           {/* 왼쪽 박스 - 포즈 버튼들 */}
           <div
             style={{
-              width: '310px',
-              height: '150px',
+              width: '223.2px',
+              height: '108px',
               border: '0px solid #A8A8A8',
               backgroundColor: 'transparent',
-              borderRadius: '10px',
+              borderRadius: '2px',
               display: 'flex',
               flexDirection: 'row',
               flexWrap: 'wrap',
-              columnGap: '2px',
+              columnGap: '1.44px',
               rowGap: '0px',
-              padding: '5px 10px',
+              padding: '3.6px 7.2px',
               justifyContent: 'center',
               alignItems: 'center'
             }}
@@ -1175,7 +1197,7 @@ export default function TrainAiPage() {
                   alt={pose}
                   style={{
                     display: 'block',
-                    height: '50px',
+                    height: '36px',
                     width: 'auto'
                   }}
                 />
@@ -1185,15 +1207,15 @@ export default function TrainAiPage() {
           {/* 오른쪽 박스 - Train, Start Training 버튼 */}
           <div
             style={{
-              width: '310px',
-              height: '150px',
+              width: '223.2px',
+              height: '108px',
               border: '0px solid #A8A8A8',
               backgroundColor: 'transparent',
-              borderRadius: '10px',
+              borderRadius: '2px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '10px',
-              padding: '10px',
+              gap: '7.2px',
+              padding: '7.2px',
               justifyContent: 'center',
               alignItems: 'center'
             }}
@@ -1226,7 +1248,7 @@ export default function TrainAiPage() {
                 alt="Train"
                 style={{
                   display: 'block',
-                  height: '50px',
+                  height: '36px',
                   width: 'auto'
                 }}
               />
@@ -1260,7 +1282,7 @@ export default function TrainAiPage() {
                 alt="Start AI Model Training"
                 style={{
                   display: 'block',
-                  height: '50px',
+                  height: '36px',
                   width: 'auto'
                 }}
               />
@@ -1273,9 +1295,9 @@ export default function TrainAiPage() {
       <div
         style={{
           position: 'absolute',
-          top: 'calc(50% + 170px)',
+          top: 'calc(50% + 182.4px)',
           left: '50%',
-          transform: 'translateX(-50%) scale(1.1)',
+          transform: 'translateX(-50%)',
           transformOrigin: 'center center',
           zIndex: 10
         }}
@@ -1286,33 +1308,33 @@ export default function TrainAiPage() {
             alt="Train Count Box"
             style={{
               display: 'block',
-              width: '700px',
+              width: '504px',
               height: 'auto'
             }}
           />
           <div
             style={{ 
               position: 'absolute',
-              top: '10px',
+              top: '7.2px',
               left: '50%',
               transform: 'translateX(-50%)',
               width: '100%', 
-              padding: '10px',
+              padding: '7.2px',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'flex-start'
             }}
           >
-            <div style={{ fontSize: '1rem', color: '#1a1a1a', fontWeight: 'bold', marginBottom: '10px' }}>
+            <div style={{ fontSize: '0.72rem', color: '#1a1a1a', fontWeight: 'bold', marginBottom: '7.2px' }}>
               Current Training Count:
             </div>
-            <div style={{ fontSize: '1rem', color: '#1a1a1a', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.72rem', color: '#1a1a1a', textAlign: 'center' }}>
               {Object.keys(poseCounts).length === 0 ? (
                 <div>No poses trained yet</div>
               ) : (
                 Object.entries(poseCounts).map(([pose, count]) => (
-                  <div key={pose} style={{ marginBottom: '5px' }}>
+                  <div key={pose} style={{ marginBottom: '3.6px' }}>
                     {pose}: {count} times
                   </div>
                 ))
@@ -1326,9 +1348,9 @@ export default function TrainAiPage() {
       <div
         style={{
           position: 'absolute',
-          top: 'calc(50% + 430px)',
+          top: 'calc(50% + 369.6px)',
           left: '50%',
-          transform: 'translateX(-50%) scale(1.1)',
+          transform: 'translateX(-50%)',
           transformOrigin: 'center center',
           zIndex: 10
         }}
@@ -1362,7 +1384,7 @@ export default function TrainAiPage() {
             style={{
               display: 'block',
               width: 'auto',
-              height: '50px'
+              height: '36px'
             }}
           />
         </button>
@@ -1372,13 +1394,13 @@ export default function TrainAiPage() {
       <div
         style={{
           position: 'absolute',
-          top: 'calc(50% + 480px)',
+          top: 'calc(50% + 405.6px)',
           left: '50%',
-          transform: 'translateX(-50%) scale(1.1)',
+          transform: 'translateX(-50%)',
           transformOrigin: 'center center',
           zIndex: 10,
           textAlign: 'center',
-          fontSize: '0.9rem',
+          fontSize: '0.648rem',
           color: '#1a1a1a',
           fontWeight: 100,
           fontFamily: 'Pretendard, sans-serif'
@@ -1391,9 +1413,9 @@ export default function TrainAiPage() {
       <div
         style={{
           position: 'absolute',
-          top: 'calc(50% + 550px)',
+          top: 'calc(50% + 456px)',
           left: '50%',
-          transform: 'translateX(-50%) scale(1.1)',
+          transform: 'translateX(-50%)',
           transformOrigin: 'center center',
           zIndex: 10
         }}
@@ -1427,66 +1449,10 @@ export default function TrainAiPage() {
             style={{
               display: 'block',
               width: 'auto',
-              height: '50px'
+              height: '36px'
             }}
           />
         </button>
-      </div>
-
-      {/* 저작권 문구 */}
-      <div
-        style={{
-          marginTop: '60px',
-          textAlign: 'center',
-          color: 'rgba(245, 245, 245, 0.8)',
-          fontSize: '0.9rem'
-        }}
-      >
-        <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <img 
-            src={logoWhite} 
-            alt="Snapshot" 
-            style={{ 
-              height: '1.1rem',
-              width: 'auto'
-            }} 
-          />
-        </div>
-        <div style={{ fontSize: '0.8rem' }}>
-          © 2025 | All rights reserved
-        </div>
-        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('/');
-            }}
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            HOME
-          </a>
-          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
-          <a 
-            href="https://github.com/leeeeesiyeon/oss-snapshot" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            GitHub
-          </a>
         </div>
       </div>
     </div>

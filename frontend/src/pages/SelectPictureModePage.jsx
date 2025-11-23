@@ -1,9 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import logoWhite from '../assets/images/logo_white.png';
 import photoUploadBox from '../assets/images/photo_upload_box.svg';
 import selectPhotoBox from '../assets/images/select_photo_box.svg';
 import startButton from '../assets/images/start_button.svg';
+import Toast from '../components/Toast';
+
+// 고정 캔버스 크기 (background 이미지 크기에 맞춤)
+const CANVAS_WIDTH = 1440;
+const CANVAS_HEIGHT = 1080;
 
 // 사진 업로드 모드 페이지
 export default function SelectPictureModePage() {
@@ -11,6 +15,7 @@ export default function SelectPictureModePage() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [draggedIndex, setDraggedIndex] = useState(null);
   const draggedIndexRef = useRef(null);
+  const [toast, setToast] = useState(null);
 
   const handleFileUpload = (event) => {
     const files = Array.from(event.target.files);
@@ -19,7 +24,7 @@ export default function SelectPictureModePage() {
     const currentPhotoCount = selectedFiles.filter(photo => photo !== undefined).length;
     
     if (currentPhotoCount + files.length > 4) {
-      alert("You can only select up to 4 photos total");
+      setToast({ message: 'You can only select up to 4 photos total', type: 'warning' });
       event.target.value = ''; // Reset input
       return;
     }
@@ -70,9 +75,29 @@ export default function SelectPictureModePage() {
       // 드래그로 변경된 순서대로 photos 배열을 전달 (1, 2, 3, 4번 박스 순서)
       navigate('/select-frame', { state: { photos: photosInOrder } });
     } else {
-      alert('Please select 4 photos before proceeding.');
+      setToast({ message: 'Please select 4 photos before proceeding.', type: 'warning' });
     }
   };
+
+  // 키보드 단축키
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Enter: 확인
+      if (e.key === 'Enter') {
+        const photosInOrder = selectedFiles.filter(photo => photo !== undefined);
+        if (photosInOrder.length === 4) {
+          handleConfirm();
+        }
+      }
+      // ESC: 뒤로가기
+      if (e.key === 'Escape') {
+        navigate('/select-mode');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedFiles, navigate]);
 
   const handleDragStart = (e, index) => {
     e.stopPropagation();
@@ -153,73 +178,160 @@ export default function SelectPictureModePage() {
 
   return (
     <div 
-      className="take-picture-page" 
+      className="take-picture-page page-fade" 
       style={{ 
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
+        width: '100%',
+        height: '100%',
         position: 'relative',
-        paddingBottom: '40px',
-        transform: 'scale(0.8)',
-        transformOrigin: 'center 5%'
+        overflowX: 'hidden',
+        overflowY: 'auto',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        paddingTop: '40px',
+        paddingBottom: '40px'
       }}
     >
-      {/* 배경 이미지 (중앙 배치) */}
+      {/* 캔버스 컨테이너 - 실제 크기 */}
       <div
         style={{
+          width: `${CANVAS_WIDTH}px`,
+          height: `${CANVAS_HEIGHT}px`,
           position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          width: '1200px',
-          height: '1500px'
+          flexShrink: 0,
+          margin: '0 auto'
         }}
       >
-        <img
-          src="/selectpicture_background.svg"
-          alt="Background"
-          style={{
-            position: 'absolute',
-            width: '1200px',
-            height: '1500px',
-            objectFit: 'contain',
-            zIndex: 1
-          }}
-        />
+        {/* Wrapper - 고정 크기 캔버스 */}
         <div
           style={{
             position: 'relative',
-            zIndex: 10,
             width: '100%',
             height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            textAlign: 'center',
-            padding: '50px'
+            backgroundImage: 'url(/selectpicture_background.svg)',
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center'
           }}
         >
+        {/* Upload Box */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '237.6px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 10,
+            width: '722.4px',
+            height: 'auto'
+          }}
+        >
+          <img
+            src={photoUploadBox}
+            alt="Photo Upload Box"
+            style={{
+              display: 'block',
+              width: '100%',
+              height: 'auto'
+            }}
+          />
+          <input
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={handleFileUpload}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              opacity: 0,
+              cursor: 'pointer',
+              zIndex: 11
+            }}
+          />
+          {selectedFiles.filter(photo => photo !== undefined).length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 12,
+              width: '90%',
+              maxHeight: '70%',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              gap: '3px',
+              justifyContent: 'center'
+            }}>
+              {selectedFiles.map((fileUrl, boxIndex) => {
+                if (fileUrl === undefined) return null;
+                const boxNumber = boxIndex + 1;
+                return (
+                  <div
+                    key={`${boxIndex}-${fileUrl}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '3px 4px',
+                      backgroundColor: '#D9D9D9',
+                      borderRadius: '1px',
+                      fontSize: '0.39rem',
+                      width: 'calc(50% - 1.5px)',
+                      minWidth: '86px'
+                    }}
+                  >
+                    <span style={{ flex: 1, color: '#1a1a1a' }}>Photo {boxNumber}</span>
+                    <button
+                      onClick={() => handleDeleteFile(boxIndex)}
+                      style={{
+                        padding: '1px 4px',
+                        fontSize: '0.34rem',
+                        cursor: 'pointer',
+                        backgroundColor: '#A8A8A8',
+                        color: '#f5f5f5',
+                        border: 'none',
+                        borderRadius: '1px',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+          {/* Grid (4 photo boxes) - 절대 위치 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '480px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 207.6px)',
+              gridTemplateRows: 'repeat(2, 157.2px)',
+              gap: '40px',
+              justifyContent: 'center',
+              zIndex: 11
+            }}
+          >
           {[0, 1, 2, 3].map((index) => {
-            // 첫 번째 박스 높이 약 188px (250 * 133/177), 간격 15px
-            // 첫 번째 박스: calc(50% - 80px)
-            // 각 박스 간격: 188px (박스 높이) + 15px (간격) = 203px
-            const topOffset = -80 + (index * 203);
             const hasPhoto = selectedFiles[index];
             return (
               <div
                 key={index}
                 style={{
-                  position: 'absolute',
-                  top: `calc(50% + ${topOffset}px)`,
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  zIndex: 11,
-                  width: '250px',
-                  height: '188px',
+                  position: 'relative',
+                  width: '249.12px',
+                  height: '188.64px',
                   cursor: 'default'
                 }}
                 onDragOver={handleDragOver}
@@ -254,8 +366,8 @@ export default function SelectPictureModePage() {
                       top: '50%',
                       left: '50%',
                       transform: 'translate(-50%, -50%)',
-                      width: 'calc(100% - 20px)',
-                      aspectRatio: '4 / 3',
+                      width: '235.92px',
+                      height: '176.94px',
                       cursor: 'grab',
                       zIndex: 12,
                       opacity: draggedIndex === index ? 0.5 : 1,
@@ -271,7 +383,7 @@ export default function SelectPictureModePage() {
                         width: '100%',
                         height: '100%',
                         objectFit: 'cover',
-                        borderRadius: '6px',
+                        borderRadius: '1px',
                         pointerEvents: 'none'
                       }}
                     />
@@ -280,207 +392,63 @@ export default function SelectPictureModePage() {
               </div>
             );
           })}
-          {/* Start Button - 마지막 박스 아래 15px */}
+          </div>
+
+          {/* Start Button - 절대 위치 */}
           <button
             onClick={handleConfirm}
             style={{
               position: 'absolute',
-              top: 'calc(50% + 670px)',
+              top: '1008px',
               left: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 11,
-              width: '200px',
+              transform: 'translateX(-50%)',
+              width: '144.48px',
               height: 'auto',
               background: 'none',
               border: 'none',
               padding: 0,
               cursor: 'pointer',
               transition: 'transform 0.1s, filter 0.1s',
-              opacity: 1
+              opacity: 1,
+              zIndex: 11
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.05)';
-              e.currentTarget.style.filter = 'grayscale(100%)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
-              e.currentTarget.style.filter = 'grayscale(0%)';
-            }}
-            onMouseDown={(e) => {
-              e.currentTarget.style.transform = 'translate(-50%, -50%) scale(0.95)';
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.05)';
-            }}
-          >
-            <img
-              src={startButton}
-              alt="Start Button"
-              style={{
-                display: 'block',
-                width: '200px',
-                height: 'auto',
-                objectFit: 'contain'
-              }}
-            />
-          </button>
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            top: '330px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 10,
-            width: '1000px',
-            height: 'auto'
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1.05)';
+            e.currentTarget.style.filter = 'grayscale(100%)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1)';
+            e.currentTarget.style.filter = 'grayscale(0%)';
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(0.95)';
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1.05)';
           }}
         >
           <img
-            src={photoUploadBox}
-            alt="Photo Upload Box"
+            src={startButton}
+            alt="Start Button"
             style={{
               display: 'block',
-              width: '100%',
-              height: 'auto'
+              width: '144.48px',
+              height: 'auto',
+              objectFit: 'contain'
             }}
           />
-          <input
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={handleFileUpload}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              opacity: 0,
-              cursor: 'pointer',
-              zIndex: 11
-            }}
-          />
-          {selectedFiles.filter(photo => photo !== undefined).length > 0 && (
-            <>
-              <div style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                zIndex: 12,
-                width: '90%',
-                maxHeight: '70%',
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                gap: '8px',
-                justifyContent: 'center'
-              }}>
-                {selectedFiles.map((fileUrl, boxIndex) => {
-                  // undefined가 아닌 사진만 표시하고, 박스 순서(1, 2, 3, 4)에 따라 번호 매김
-                  if (fileUrl === undefined) return null;
-                  
-                  // 박스 순서는 인덱스 + 1
-                  const boxNumber = boxIndex + 1;
-                  
-                  return (
-                    <div
-                      key={`${boxIndex}-${fileUrl}`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        backgroundColor: '#D9D9D9',
-                        borderRadius: '4px',
-                        fontSize: '0.9rem',
-                        width: 'calc(50% - 4px)',
-                        minWidth: '200px'
-                      }}
-                    >
-                      <span style={{ flex: 1, color: '#1a1a1a' }}>Photo {boxNumber}</span>
-                      <button
-                        onClick={() => handleDeleteFile(boxIndex)}
-                        style={{
-                          padding: '4px 12px',
-                          fontSize: '0.8rem',
-                          cursor: 'pointer',
-                          backgroundColor: '#A8A8A8',
-                          color: '#f5f5f5',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
+          </button>
         </div>
       </div>
 
-      {/* 저작권 문구 */}
-      <div
-        style={{
-          marginTop: '40px',
-          textAlign: 'center',
-          color: 'rgba(245, 245, 245, 0.8)',
-          fontSize: '0.9rem'
-        }}
-      >
-        <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <img 
-            src={logoWhite} 
-            alt="Snapshot" 
-            style={{ 
-              height: '1.1rem',
-              width: 'auto'
-            }} 
-          />
-        </div>
-        <div style={{ fontSize: '0.8rem' }}>
-          © 2025 | All rights reserved
-        </div>
-        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('/');
-            }}
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            HOME
-          </a>
-          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
-          <a 
-            href="https://github.com/leeeeesiyeon/oss-snapshot" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            GitHub
-          </a>
-        </div>
-      </div>
+      {/* 토스트 알림 */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

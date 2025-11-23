@@ -1,13 +1,17 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import html2canvas from 'html2canvas';
-import logoWhite from '../assets/images/logo_white.png';
+import Toast from '../components/Toast';
 import frameBlack from '../assets/images/frames/frame_black.png';
 import frameRed from '../assets/images/frames/frame_red.png';
 import frameWhite from '../assets/images/frames/frame_white.png';
 import saveButton from '../assets/images/save_button.svg';
 import gotohomeButton from '../assets/images/gotohome_button.svg';
 import barSvg from '../assets/images/_bar.svg';
+
+// 고정 캔버스 크기 (background 이미지 크기에 맞춤)
+const CANVAS_WIDTH = 1440;
+const CANVAS_HEIGHT = 1080;
 
 // 네컷 출력/저장 페이지
 export default function PrintPage() {
@@ -19,6 +23,8 @@ export default function PrintPage() {
   const frameRef = useRef(null);
   const [isAnimated, setIsAnimated] = useState(false);
   const [isFixed, setIsFixed] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // 필터 CSS 스타일 생성
   const getFilterStyle = (filterType) => {
@@ -186,6 +192,12 @@ export default function PrintPage() {
                 document.body.appendChild(link);
                 link.click();
                 
+                // 축하 효과 표시
+                setShowCelebration(true);
+                setTimeout(() => {
+                  setShowCelebration(false);
+                }, 4000);
+                
                 setTimeout(() => {
                   document.body.removeChild(link);
                   URL.revokeObjectURL(url);
@@ -193,122 +205,76 @@ export default function PrintPage() {
               }, 'image/png', 1.0);
       
             } catch (error) {
-              alert('파일 저장 중 오류가 발생했습니다: ' + error.message);
+              setToast({ message: `Save error: ${error.message}`, type: 'error' });
       console.error('저장 오류:', error);
     }
   };
 
+  // 키보드 단축키
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // ESC: 뒤로가기
+      if (e.key === 'Escape') {
+        navigate('/select-frame');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
   if (!photos || photos.length === 0) {
     return (
-      <div className="print-page" style={{ transform: 'scale(0.8)', transformOrigin: 'center 5%' }}>
+      <div className="print-page" style={{}}>
         <h2>No photos available</h2>
-
-        {/* 저작권 문구 */}
-        <div
-          style={{
-            marginTop: '40px',
-            textAlign: 'center',
-            color: 'rgba(245, 245, 245, 0.8)',
-            fontSize: '0.9rem'
-          }}
-        >
-          <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <img 
-              src={logoWhite} 
-              alt="Snapshot" 
-              style={{ 
-                height: '1.1rem',
-                width: 'auto'
-              }} 
-            />
-          </div>
-          <div style={{ fontSize: '0.8rem' }}>
-            © 2025 | All rights reserved
-          </div>
-          <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
-            <a 
-              href="#" 
-              onClick={(e) => {
-                e.preventDefault();
-                navigate('/');
-              }}
-              style={{ 
-                color: 'rgba(245, 245, 245, 0.8)', 
-                textDecoration: 'none',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-              onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-            >
-              HOME
-            </a>
-            <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
-            <a 
-              href="https://github.com/leeeeesiyeon/oss-snapshot" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              style={{ 
-                color: 'rgba(245, 245, 245, 0.8)', 
-                textDecoration: 'none',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-              onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-            >
-              GitHub
-            </a>
-          </div>
-        </div>
       </div>
     );
   }
 
   return (
-    <div className="print-page" style={{ 
-      transform: 'scale(0.8)', 
-      transformOrigin: 'center 5%',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
+    <div className="print-page page-fade" style={{ 
       width: '100%',
-      minHeight: '100vh'
+      height: '100%',
+      position: 'relative',
+      overflowX: 'hidden',
+      overflowY: 'auto',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      paddingTop: '40px',
+      paddingBottom: '40px'
     }}>
-      {/* 배경 이미지 */}
-      <div style={{ 
-        position: 'relative', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '100%'
-      }}>
-        <img
-          src="/print_background.svg"
-          alt="Background"
-          style={{
-            display: 'block',
-            width: 'auto',
-            height: 'auto',
-            objectFit: 'contain',
-            zIndex: 1
-          }}
-        />
-        <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 10, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h2>Four Cut Complete</h2>
-        </div>
-
+      {/* 캔버스 컨테이너 - 실제 크기 */}
+      <div
+        style={{
+          width: `${CANVAS_WIDTH}px`,
+          height: `${CANVAS_HEIGHT}px`,
+          position: 'relative',
+          flexShrink: 0,
+          margin: '0 auto'
+        }}
+      >
+        {/* Wrapper - 고정 크기 캔버스 */}
+        <div style={{ 
+          position: 'relative', 
+          width: '100%',
+          height: '100%',
+          backgroundImage: 'url(/print_background.svg)',
+          backgroundSize: 'contain',
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center'
+        }}>
         {/* bar 이미지 (독립적으로 배치) */}
         <img 
           src={barSvg} 
           alt="Bar"
           style={{
             position: 'absolute',
-            bottom: '243px',
+            bottom: '242.4px',
             left: '50%',
             transform: 'translateX(-50%)',
-            width: '262px',
-            height: '280px',
+            width: '257.04px',
+            height: '275.52px',
             zIndex: 15,
             pointerEvents: 'none'
           }}
@@ -318,12 +284,12 @@ export default function PrintPage() {
         <div
           style={{
             position: 'absolute',
-            bottom: '243px',
+            bottom: '242.4px',
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 10,
-            width: '195px',
-            height: '335px',
+            width: '189.84px',
+            height: '330.96px',
             overflow: 'hidden',
           }}
         >
@@ -339,7 +305,7 @@ export default function PrintPage() {
               left: '-418.5px',
               transition: isFixed ? 'none' : (isAnimated ? 'transform 3.0s ease-out' : 'none'),
               transform: isAnimated 
-                ? 'scale(0.1165) translateY(365px)' 
+                ? 'scale(0.1165) translateY(215px)' 
                 : 'scale(0.1165) translateY(-100%)'
             }}
           >
@@ -363,7 +329,7 @@ export default function PrintPage() {
                     width: '795px',
                     height: '597px',
                     overflow: 'hidden',
-                    borderRadius: '4px',
+                    borderRadius: '1px',
                     display: 'block',
                     position: 'relative'
                   }}
@@ -438,7 +404,7 @@ export default function PrintPage() {
                   width: '795px',
                   height: '597px',
                   overflow: 'hidden',
-                  borderRadius: '4px',
+                  borderRadius: '1px',
                   display: 'block',
                   position: 'relative'
                 }}
@@ -482,7 +448,7 @@ export default function PrintPage() {
           onClick={handleSave}
           style={{
             position: 'absolute',
-            bottom: '125px',
+            bottom: '127.2px',
             left: '50%',
             transform: 'translateX(-50%)',
             background: 'none',
@@ -514,7 +480,7 @@ export default function PrintPage() {
             alt="Save"
             style={{
               display: 'block',
-              width: '200px',
+              width: '194.88px',
               height: 'auto',
               objectFit: 'contain'
             }}
@@ -526,7 +492,7 @@ export default function PrintPage() {
           onClick={() => navigate('/')}
           style={{
             position: 'absolute',
-            bottom: '20px',
+            bottom: '21.6px',
             left: '50%',
             transform: 'translateX(-50%)',
             background: 'none',
@@ -558,70 +524,93 @@ export default function PrintPage() {
             alt="Go to Home"
             style={{
               display: 'block',
-              width: '200px',
+              width: '194.88px',
               height: 'auto',
               objectFit: 'contain'
             }}
           />
-        </button>
+          </button>
+        </div>
       </div>
 
-      {/* 저작권 문구 (배경 이미지 아래 고정) */}
-      <div
-        style={{
-          marginTop: '60px',
-          textAlign: 'center',
-          color: 'rgba(245, 245, 245, 0.8)',
-          fontSize: '0.9rem'
-        }}
-      >
-        <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <img 
-            src={logoWhite} 
-            alt="Snapshot" 
-            style={{ 
-              height: '1.1rem',
-              width: 'auto'
-            }} 
-          />
-        </div>
-        <div style={{ fontSize: '0.8rem' }}>
-          © 2025 | All rights reserved
-        </div>
-        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('/');
+      {/* 축하 효과 */}
+      {showCelebration && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          {/* 중앙 메시지 */}
+          <div
+            style={{
+              textAlign: 'center',
+              animation: 'celebrate 0.6s ease-out',
+              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              padding: '40px 60px',
+              borderRadius: '16px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
             }}
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
           >
-            HOME
-          </a>
-          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
-          <a 
-            href="https://github.com/leeeeesiyeon/oss-snapshot" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            GitHub
-          </a>
+            <div
+              style={{
+                fontSize: '3rem',
+                fontWeight: 'bold',
+                color: '#bd1414',
+                textShadow: '0 0 20px rgba(189, 20, 20, 0.3)',
+                marginBottom: '1rem'
+              }}
+            >
+              ✓ Saved!
+            </div>
+            <div
+              style={{
+                fontSize: '1.2rem',
+                color: '#1a1a1a',
+                fontWeight: '500'
+              }}
+            >
+              Photo saved successfully!
+            </div>
+          </div>
+
+          {/* 컨페티 효과 */}
+          {[...Array(30)].map((_, i) => (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: '10px',
+                height: '10px',
+                backgroundColor: ['#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181'][i % 5],
+                borderRadius: '50%',
+                animation: `confetti ${1 + Math.random() * 2}s ease-out forwards`,
+                animationDelay: `${Math.random() * 0.5}s`,
+                transform: `translate(${(Math.random() - 0.5) * 200}px, ${(Math.random() - 0.5) * 200}px)`
+              }}
+            />
+          ))}
         </div>
-      </div>
+      )}
+
+      {/* 토스트 알림 */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

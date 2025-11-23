@@ -2,8 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import * as Human from '@vladmandic/human';
-import logoWhite from '../assets/images/logo_white.png';
 import cameraBox from '../assets/images/takepicture_camera_box.svg';
+import Toast from '../components/Toast';
+
+// 고정 캔버스 크기 (background 이미지 크기에 맞춤)
+const CANVAS_WIDTH = 1440;
+const CANVAS_HEIGHT = 1080;
 
 const videoConstraints = {
   width: 640,
@@ -25,6 +29,7 @@ export default function AiModePage() {
   const [isShooting, setIsShooting] = useState(false);
   const [aiTargetIndex, setAiTargetIndex] = useState(0);
   const [isFlashing, setIsFlashing] = useState(false);
+  const [toast, setToast] = useState(null);
   
   const detectorRef = useRef(null);
   const aiLoopRafRef = useRef(null);
@@ -707,58 +712,75 @@ export default function AiModePage() {
     };
   }, []);
 
+  // 키보드 단축키
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // ESC: 뒤로가기
+      if (e.key === 'Escape') {
+        navigate('/select-mode');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
   const isCompleted = aiTargetIndex >= AI_POSES.length || capturedPhotos.length === 4;
   const nextTarget = AI_POSES[Math.min(aiTargetIndex, AI_POSES.length - 1)];
 
   return (
     <div 
-      className="take-picture-page" 
+      className="take-picture-page page-fade" 
       style={{ 
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
+        width: '100%',
+        height: '100%',
         position: 'relative',
-        paddingBottom: '40px',
-        transform: 'scale(0.8)',
-        transformOrigin: 'center 5%'
+        overflowX: 'hidden',
+        overflowY: 'auto',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        paddingTop: '40px',
+        paddingBottom: '40px'
       }}
     >
-      {/* 배경 이미지 (중앙 배치) */}
+      {/* 캔버스 컨테이너 - 실제 크기 */}
       <div
         style={{
+          width: `${CANVAS_WIDTH}px`,
+          height: `${CANVAS_HEIGHT}px`,
           position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          width: '1200px',
-          height: '1500px'
+          flexShrink: 0,
+          margin: '0 auto'
         }}
       >
-        <img
-          src="/takepicture_1_2_background.svg"
-          alt="Background"
-          style={{
-            position: 'absolute',
-            width: '1200px',
-            height: '1500px',
-            objectFit: 'contain',
-            zIndex: 1
-          }}
-        />
+        {/* Wrapper - 고정 크기 캔버스 */}
         <div
           style={{
-            position: 'absolute',
-            width: '640px',
-            height: '480px',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%) translateY(-230px)',
-            zIndex: 5
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            backgroundImage: 'url(/takepicture_1_2_background.svg)',
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center'
           }}
         >
+          {/* CameraBox - 절대 위치 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '420px',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '515.52px',
+              height: '387.36px',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 5
+            }}
+          >
           {/* 카메라 박스 배경 */}
           <img
             src={cameraBox}
@@ -774,15 +796,12 @@ export default function AiModePage() {
           {/* 웹캠 */}
           <div
             style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
+              position: 'relative',
               zIndex: 2,
-              width: '640px',
-              height: '480px',
+              width: '515.52px',
+              height: '387.36px',
               overflow: 'hidden',
-              borderRadius: '10px'
+              borderRadius: '2px'
             }}
           >
             <Webcam
@@ -795,7 +814,7 @@ export default function AiModePage() {
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                borderRadius: '5px'
+                borderRadius: '2px'
               }}
             />
             {countdown > 0 && (
@@ -813,9 +832,28 @@ export default function AiModePage() {
                   backgroundColor: 'rgba(0,0,0,0.4)',
                 }}
               >
+                {/* 카운트다운 빛 효과 */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 70%)',
+                    animation: 'countdownGlow 1s ease-in-out infinite',
+                    pointerEvents: 'none'
+                  }}
+                />
                 <h2
                   className="countdown-text"
-                  style={{ fontSize: '4rem', color: '#f5f5f5', fontWeight: 'bold' }}
+                  style={{ 
+                    fontSize: '4rem', 
+                    color: '#f5f5f5', 
+                    fontWeight: 'bold',
+                    textShadow: '0 0 30px rgba(255, 255, 255, 0.8), 0 0 60px rgba(255, 255, 255, 0.6)',
+                    position: 'relative',
+                    zIndex: 1
+                  }}
                 >
                   {countdown}
                 </h2>
@@ -878,6 +916,22 @@ export default function AiModePage() {
                 </h2>
               </div>
             )}
+            {/* 스포트라이트 효과 (촬영 시) */}
+            {(isFlashing || (countdown === 0 && !isCompleted)) && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'radial-gradient(ellipse 60% 80% at 50% 50%, rgba(255, 255, 255, 0.3) 0%, rgba(0, 0, 0, 0.6) 70%)',
+                  animation: 'spotlight 0.3s ease-out',
+                  zIndex: 99,
+                  pointerEvents: 'none'
+                }}
+              />
+            )}
             {isFlashing && (
               <div
                 style={{
@@ -887,12 +941,12 @@ export default function AiModePage() {
                   right: 0,
                   bottom: 0,
                   background: `
-                    radial-gradient(ellipse 60% 80% at 30% 40%, rgba(245, 245, 245, 0.15) 0%, transparent 50%),
-                    radial-gradient(ellipse 80% 50% at 70% 60%, rgba(245, 245, 245, 0.25) 0%, transparent 60%),
-                    radial-gradient(ellipse 50% 70% at 50% 50%, rgba(245, 245, 245, 0.1) 0%, transparent 45%),
-                    radial-gradient(ellipse 70% 60% at 20% 70%, rgba(245, 245, 245, 0.2) 0%, transparent 55%),
-                    radial-gradient(ellipse 55% 75% at 80% 30%, rgba(245, 245, 245, 0.18) 0%, transparent 50%),
-                    radial-gradient(circle, transparent 0%, transparent 25%, rgba(245, 245, 245, 0.3) 50%, rgba(245, 245, 245, 0.6) 75%, rgba(245, 245, 245, 0.85) 90%, rgba(245, 245, 245, 0.95) 100%)
+                    radial-gradient(ellipse 60% 80% at 30% 40%, rgba(255, 255, 255, 0.4) 0%, transparent 50%),
+                    radial-gradient(ellipse 80% 50% at 70% 60%, rgba(255, 255, 255, 0.5) 0%, transparent 60%),
+                    radial-gradient(ellipse 50% 70% at 50% 50%, rgba(255, 255, 255, 0.3) 0%, transparent 45%),
+                    radial-gradient(ellipse 70% 60% at 20% 70%, rgba(255, 255, 255, 0.4) 0%, transparent 55%),
+                    radial-gradient(ellipse 55% 75% at 80% 30%, rgba(255, 255, 255, 0.35) 0%, transparent 50%),
+                    radial-gradient(circle, transparent 0%, transparent 25%, rgba(255, 255, 255, 0.5) 50%, rgba(255, 255, 255, 0.7) 75%, rgba(255, 255, 255, 0.9) 90%, rgba(255, 255, 255, 0.95) 100%)
                   `,
                   filter: 'blur(40px)',
                   transition: 'opacity 0.15s ease-out',
@@ -903,83 +957,70 @@ export default function AiModePage() {
             )}
           </div>
         </div>
-        <div
-          style={{
-            position: 'relative',
-            zIndex: 10,
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}
-        >
-        <p className="webcam-status" style={{ position: 'absolute', top: 'calc(50% + 20px)', left: '50%', transform: 'translateX(-50%)', zIndex: 10, fontSize: '1rem', color: '#1a1a1a', fontWeight: 'bold' }}>
-          {isCompleted
-            ? "Capture Complete"
-            : `${capturedPhotos.length} / 4`}
-        </p>
 
+          {/* StatusText - 절대 위치 */}
+          <p 
+            className="webcam-status" 
+            style={{ 
+              position: 'absolute',
+              top: '636px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              fontSize: '1.2rem', 
+              color: '#1a1a1a', 
+              fontWeight: 'bold',
+              zIndex: 10
+            }}
+          >
+            {isCompleted
+              ? "Capture Complete"
+              : `${capturedPhotos.length} / 4`}
+          </p>
+
+          {/* 촬영 완료 사진 슬라이드 효과 */}
+          {capturedPhotos.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '680px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                gap: '8px',
+                zIndex: 10
+              }}
+            >
+              {capturedPhotos.map((photo, index) => (
+                <img
+                  key={index}
+                  src={photo}
+                  alt={`Photo ${index + 1}`}
+                  style={{
+                    width: '60px',
+                    height: '45px',
+                    objectFit: 'cover',
+                    borderRadius: '4px',
+                    border: '2px solid rgba(255, 255, 255, 0.5)',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                    animation: 'slideIn 0.5s ease-out',
+                    animationDelay: `${index * 0.1}s`,
+                    animationFillMode: 'both'
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 저작권 문구 */}
-      <div
-        style={{
-          marginTop: '60px',
-          textAlign: 'center',
-          color: 'rgba(245, 245, 245, 0.8)',
-          fontSize: '0.9rem'
-        }}
-      >
-        <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <img 
-            src={logoWhite} 
-            alt="Snapshot" 
-            style={{ 
-              height: '1.1rem',
-              width: 'auto'
-            }} 
-          />
-        </div>
-        <div style={{ fontSize: '0.8rem' }}>
-          © 2025 | All rights reserved
-        </div>
-        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('/');
-            }}
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            HOME
-          </a>
-          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
-          <a 
-            href="https://github.com/leeeeesiyeon/oss-snapshot" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            GitHub
-          </a>
-        </div>
-      </div>
+      {/* 토스트 알림 */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

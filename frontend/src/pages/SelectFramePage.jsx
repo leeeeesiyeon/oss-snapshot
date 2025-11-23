@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import Toast from '../components/Toast';
+
+// 고정 캔버스 크기 (background 이미지 크기에 맞춤)
+const CANVAS_WIDTH = 1440;
+const CANVAS_HEIGHT = 1080;
 import frameBlack from '../assets/images/frames/frame_black.png';
 import frameRed from '../assets/images/frames/frame_red.png';
 import frameWhite from '../assets/images/frames/frame_white.png';
-import logoWhite from '../assets/images/logo_white.png';
 import whiteButton from '../assets/images/selectframe_white_button.svg';
 import blackButton from '../assets/images/selectframe_black_button.svg';
 import redButton from '../assets/images/selectframe_red_button.svg';
@@ -26,6 +30,7 @@ export default function SelectFramePage() {
   const [retouchedPhotos, setRetouchedPhotos] = useState([]); // 보정된 사진들
   const [isProcessing, setIsProcessing] = useState(false); // 처리 중 상태
   const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 }); // 진행률
+  const [toast, setToast] = useState(null);
 
   // 프레임 이미지
   const frameImages = {
@@ -224,7 +229,7 @@ export default function SelectFramePage() {
             
             // 재시도 실패 또는 다른 오류인 경우 원본 사용
             enhancedPhotos.push(photo);
-            alert(`사진 ${i + 1} 보정 실패: ${error.message}\n원본 이미지를 사용합니다.`);
+            setToast({ message: `Photo ${i + 1} retouch failed. Using original.`, type: 'warning' });
           }
         }
         
@@ -233,7 +238,7 @@ export default function SelectFramePage() {
         setProcessingProgress({ current: 0, total: 0 });
       } catch (error) {
         console.error('Retouch error:', error);
-        alert('보정 처리 중 오류가 발생했습니다: ' + error.message);
+        setToast({ message: `Retouch error: ${error.message}`, type: 'error' });
         setAiRetouch(false);
         setRetouchedPhotos([]);
         setProcessingProgress({ current: 0, total: 0 });
@@ -255,7 +260,7 @@ export default function SelectFramePage() {
 
   const handleConfirm = () => {
     if (photos.length === 0) {
-      alert('No photos available');
+      setToast({ message: 'No photos available', type: 'error' });
       return;
     }
     // 프레임, 필터, 사진 정보를 함께 전달 (보정된 사진 또는 원본)
@@ -268,6 +273,23 @@ export default function SelectFramePage() {
       } 
     });
   };
+
+  // 키보드 단축키
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Enter: 확인 (Print 페이지로 이동)
+      if (e.key === 'Enter' && photos.length > 0) {
+        handleConfirm();
+      }
+      // ESC: 뒤로가기
+      if (e.key === 'Escape') {
+        navigate(-1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [photos.length, navigate]);
 
   if (photos.length === 0) {
     return (
@@ -290,56 +312,55 @@ export default function SelectFramePage() {
 
   return (
     <div 
-      className="select-frame-page" 
+      className="select-frame-page page-fade" 
       style={{ 
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
+        width: '100%',
+        height: '100%',
         position: 'relative',
-        paddingBottom: '40px',
-        transform: 'scale(0.8)',
-        transformOrigin: 'center 5%'
+        overflowX: 'hidden',
+        overflowY: 'auto',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        paddingTop: '40px',
+        paddingBottom: '40px'
       }}
     >
-      {/* 배경 이미지 (중앙 배치) */}
+      {/* 캔버스 컨테이너 - 실제 크기 */}
       <div
         style={{
+          width: `${CANVAS_WIDTH}px`,
+          height: `${CANVAS_HEIGHT}px`,
           position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-start',
-          alignItems: 'center',
-          width: '1200px',
-          height: '1500px'
+          flexShrink: 0,
+          margin: '0 auto'
         }}
       >
-        <img
-          src="/selectframe_background.svg"
-          alt="Background"
+        {/* Wrapper - 고정 크기 캔버스 */}
+        <div
           style={{
-            position: 'absolute',
-            width: '1200px',
-            height: '1500px',
-            objectFit: 'contain',
-            zIndex: 1
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            backgroundImage: 'url(/selectframe_background.svg)',
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center'
           }}
-        />
-        {/* 프레임 선택 버튼들 */}
-        <div style={{ 
-          position: 'absolute',
-          top: '230px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 10,
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          gap: '60px', 
-          flexWrap: 'wrap'
-        }}>
-        {/* White 버튼 */}
+        >
+          {/* FrameButtonRow - 절대 위치 */}
+          <div style={{ 
+            position: 'absolute',
+            top: '162px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            gap: '34px', 
+            zIndex: 10
+          }}>
+            {/* White 버튼 */}
         <button 
           onClick={() => handleFrameSelect('white')}
           style={{
@@ -356,11 +377,9 @@ export default function SelectFramePage() {
             alt="White Frame" 
             style={{ 
               display: 'block',
-              width: '50.2125px',
+              width: '32px',
               height: 'auto',
-              objectFit: 'contain',
-              maxWidth: 'none',
-              minWidth: '50.2125px'
+              objectFit: 'contain'
             }} 
           />
         </button>
@@ -382,11 +401,9 @@ export default function SelectFramePage() {
             alt="Black Frame" 
             style={{ 
               display: 'block',
-              width: '50.2125px',
+              width: '32px',
               height: 'auto',
-              objectFit: 'contain',
-              maxWidth: 'none',
-              minWidth: '50.2125px'
+              objectFit: 'contain'
             }} 
           />
         </button>
@@ -408,25 +425,27 @@ export default function SelectFramePage() {
             alt="Red Frame" 
             style={{ 
               display: 'block',
-              width: '50.2125px',
+              width: '32px',
               height: 'auto',
-              objectFit: 'contain',
-              maxWidth: 'none',
-              minWidth: '50.2125px'
+              objectFit: 'contain'
             }} 
           />
         </button>
-        </div>
+          </div>
 
-      {/* 필터 선택 버튼들 - 프레임 선택 버튼과 프레임 사이에 가로 배치 (독립 개체) */}
-      {/* None 버튼 */}
-      <div style={{ 
-        position: 'absolute',
-        top: '320px',
-        left: 'calc(50% - 247.5px)',
-        transform: 'translateX(-50%)',
-        zIndex: 10
-      }}>
+          {/* FilterButtonRow - 절대 위치 */}
+          <div style={{ 
+            position: 'absolute',
+            top: '212.4px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '15px',
+            zIndex: 10
+          }}>
         <button 
           onClick={() => handleFilterSelect('none')}
           style={{
@@ -443,24 +462,13 @@ export default function SelectFramePage() {
             alt="None Filter" 
             style={{ 
               display: 'block',
-              width: '150px',
+              width: '120px',
               height: 'auto',
-              objectFit: 'contain',
-              maxWidth: 'none',
-              minWidth: '150px'
+              objectFit: 'contain'
             }} 
           />
         </button>
-      </div>
-      
-      {/* Grayscale 버튼 */}
-      <div style={{ 
-        position: 'absolute',
-        top: '320px',
-        left: 'calc(50% - 82.5px)',
-        transform: 'translateX(-50%)',
-        zIndex: 10
-      }}>
+        
         <button 
           onClick={() => handleFilterSelect('grayscale')}
           style={{
@@ -477,24 +485,13 @@ export default function SelectFramePage() {
             alt="Grayscale Filter" 
             style={{ 
               display: 'block',
-              width: '150px',
+              width: '120px',
               height: 'auto',
-              objectFit: 'contain',
-              maxWidth: 'none',
-              minWidth: '150px'
+              objectFit: 'contain'
             }} 
           />
         </button>
-      </div>
-      
-      {/* 흐리게 버튼 */}
-      <div style={{ 
-        position: 'absolute',
-        top: '320px',
-        left: 'calc(50% + 82.5px)',
-        transform: 'translateX(-50%)',
-        zIndex: 10
-      }}>
+        
         <button 
           onClick={() => handleFilterSelect('6s')}
           style={{
@@ -511,24 +508,13 @@ export default function SelectFramePage() {
             alt="Muted Filter" 
             style={{ 
               display: 'block',
-              width: '150px',
+              width: '120px',
               height: 'auto',
-              objectFit: 'contain',
-              maxWidth: 'none',
-              minWidth: '150px'
+              objectFit: 'contain'
             }} 
           />
         </button>
-      </div>
-      
-      {/* Bright 버튼 */}
-      <div style={{ 
-        position: 'absolute',
-        top: '320px',
-        left: 'calc(50% + 247.5px)',
-        transform: 'translateX(-50%)',
-        zIndex: 10
-      }}>
+        
         <button 
           onClick={() => handleFilterSelect('bright')}
           style={{
@@ -545,27 +531,25 @@ export default function SelectFramePage() {
             alt="Bright Filter" 
             style={{ 
               display: 'block',
-              width: '150px',
+              width: '120px',
               height: 'auto',
-              objectFit: 'contain',
-              maxWidth: 'none',
-              minWidth: '150px'
+              objectFit: 'contain'
             }} 
           />
         </button>
       </div>
 
-      {/* AI 보정 버튼 - 필터 버튼 밑에 배치, 필터 버튼과 동일한 스타일 */}
-      <div style={{ 
-        position: 'absolute',
-        top: '390px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 10,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center'
-      }}>
+          {/* RetouchButton - 절대 위치 */}
+          <div style={{ 
+            position: 'absolute',
+            top: '258px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            zIndex: 10
+          }}>
         <button 
           onClick={handleRetouch}
           disabled={isProcessing}
@@ -607,56 +591,127 @@ export default function SelectFramePage() {
             style={{
               display: 'block',
               width: 'auto',
-              height: '57.75px', // print 버튼과 동일한 높이 (200/142 * 41)
+              height: '45px',
               objectFit: 'contain'
             }}
           />
         </button>
-        {/* 처리 중 표시 - 버튼 밑에 영어로 표시 */}
+        {/* 처리 중 표시 - 진행률 바 및 스피너 포함 */}
         {isProcessing && processingProgress.total > 0 && (
           <div style={{ 
             marginTop: '8px',
-            fontSize: '14px',
-            color: '#666',
+            width: '120px',
             textAlign: 'center'
           }}>
-            Processing {processingProgress.current}/{processingProgress.total}
+            {/* 로딩 스피너 */}
+            <div style={{
+              width: '24px',
+              height: '24px',
+              margin: '0 auto 8px',
+              border: '3px solid #e0e0e0',
+              borderTop: '3px solid #4CAF50',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite'
+            }} />
+            <div style={{ 
+              fontSize: '8px',
+              color: '#666',
+              marginBottom: '4px'
+            }}>
+              Processing {processingProgress.current}/{processingProgress.total}
+            </div>
+            {/* 진행률 바 */}
+            <div style={{
+              width: '100%',
+              height: '6px',
+              backgroundColor: '#e0e0e0',
+              borderRadius: '3px',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${(processingProgress.current / processingProgress.total) * 100}%`,
+                height: '100%',
+                backgroundColor: '#4CAF50',
+                borderRadius: '3px',
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
           </div>
         )}
-        {/* 보정 완료 표시 */}
+        {/* 보정 완료 표시 - 성공 애니메이션 */}
         {!isProcessing && aiRetouch && retouchedPhotos.length > 0 && (
           <div style={{ 
             marginTop: '8px',
-            fontSize: '14px',
-            color: '#4CAF50',
-            textAlign: 'center',
-            fontWeight: '500'
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '4px'
           }}>
-            Retouch completed!
+            {/* 체크마크 애니메이션 */}
+            <div style={{
+              width: '20px',
+              height: '20px',
+              borderRadius: '50%',
+              backgroundColor: '#4CAF50',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              animation: 'scaleIn 0.3s ease-out'
+            }}>
+              <svg 
+                width="12" 
+                height="12" 
+                viewBox="0 0 12 12" 
+                fill="none"
+                style={{
+                  animation: 'checkmark 0.4s ease-out 0.2s both'
+                }}
+              >
+                <path
+                  d="M2 6L5 9L10 2"
+                  stroke="white"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    strokeDasharray: '12',
+                    strokeDashoffset: '12',
+                    animation: 'drawCheck 0.4s ease-out 0.2s forwards'
+                  }}
+                />
+              </svg>
+            </div>
+            <div style={{ 
+              fontSize: '8px',
+              color: '#4CAF50',
+              textAlign: 'center',
+              fontWeight: '500'
+            }}>
+              Retouch completed!
+            </div>
           </div>
         )}
       </div>
 
-      {/* 선택된 프레임 미리보기 */}
-      {selectedFrame && (
-        <div style={{ 
-          position: 'absolute',
-          top: '515px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 10,
-          display: 'inline-block',
-          width: '571.2px',  // 714px * 0.8
-          height: '856.8px'  // 1071px * 0.8
-        }}>
+          {/* FramePreview - 절대 위치 */}
+          {selectedFrame && (
+            <div style={{ 
+              position: 'absolute',
+              top: '350px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 10,
+              width: '432px',
+              height: '648px'
+            }}>
         {/* 사진들을 프레임 아래에 배치 */}
         <div style={{
           position: 'absolute',
-          top: '25.6px',  // 32px * 0.8
+          top: '19.2px',
           left: '50%',
           transform: 'translateX(-50%)',
-          width: '256px',  // 320px * 0.8
-          height: '819.2px',  // 1024px * 0.8
+          width: '192px',
+          height: '618px',
           display: 'grid',
           gridTemplateColumns: '1fr',
           gap: '0px',
@@ -668,63 +723,81 @@ export default function SelectFramePage() {
               src={photo} 
               alt={`Photo ${index + 1}`}
               style={{
-                width: '256px',  // 320px * 0.8
-                height: '204.8px',  // 256px * 0.8
+                width: '192px',
+                height: '156px',
                 objectFit: 'cover',
-                borderRadius: '4px',
+                borderRadius: '1px',
                 ...getFilterStyle(selectedFilter)
               }}
             />
           ))}
         </div>
         
+          {/* 프레임 경계 조명 효과 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '450px',
+              height: '666px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%)',
+              boxShadow: '0 0 30px rgba(255, 255, 255, 0.3), inset 0 0 20px rgba(255, 255, 255, 0.1)',
+              animation: 'frameGlow 2s ease-in-out infinite',
+              zIndex: 1,
+              pointerEvents: 'none'
+            }}
+          />
+          
           {/* 프레임 이미지 (사진 위에 배치) */}
           <img 
             src={frameImages[selectedFrame]} 
             alt={`${selectedFrame} frame`}
             style={{ 
-              width: '571.2px',  // 714px * 0.8
-              height: '856.8px',  // 1071px * 0.8
+              width: '432px',
+              height: '648px',
               objectFit: 'contain',
               position: 'relative',
               zIndex: 2,
               filter: 'drop-shadow(0 0 10px rgba(128, 128, 128, 0.8))'
             }}
           />
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Confirm 버튼 */}
-      <div style={{ 
-        position: 'absolute',
-        top: '1400px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 10
-      }}>
-        <button
-          onClick={handleConfirm}
-          style={{
-            border: 'none',
-            cursor: 'pointer',
-            backgroundColor: 'transparent',
-            padding: 0,
-            display: 'inline-block',
-            opacity: 1
-          }}
+          {/* PrintButton - 절대 위치 */}
+          <button
+            onClick={handleConfirm}
+            style={{
+              position: 'absolute',
+              top: '1008px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              border: 'none',
+              cursor: 'pointer',
+              backgroundColor: 'transparent',
+              padding: 0,
+              display: 'inline-block',
+              opacity: 1,
+              zIndex: 10,
+              width: '192px',
+              height: 'auto'
+            }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.05)';
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1.05)';
             e.currentTarget.style.filter = 'grayscale(100%)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1)';
             e.currentTarget.style.filter = 'grayscale(0%)';
           }}
           onMouseDown={(e) => {
-            e.currentTarget.style.transform = 'scale(0.95)';
+            e.currentTarget.style.transform = 'translateX(-50%) scale(0.95)';
           }}
           onMouseUp={(e) => {
-            e.currentTarget.style.transform = 'scale(1.05)';
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1.05)';
           }}
         >
           <img
@@ -732,71 +805,23 @@ export default function SelectFramePage() {
             alt="Print"
             style={{
               display: 'block',
-              width: '200px',
+              width: '192px',
               height: 'auto',
               objectFit: 'contain'
             }}
           />
         </button>
-      </div>
+        </div>
       </div>
 
-      {/* 저작권 문구 */}
-      <div
-        style={{
-          marginTop: '60px',
-          textAlign: 'center',
-          color: 'rgba(245, 245, 245, 0.8)',
-          fontSize: '0.9rem'
-        }}
-      >
-        <div style={{ marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <img 
-            src={logoWhite} 
-            alt="Snapshot" 
-            style={{ 
-              height: '1.1rem',
-              width: 'auto'
-            }} 
-          />
-        </div>
-        <div style={{ fontSize: '0.8rem' }}>
-          © 2025 | All rights reserved
-        </div>
-        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '0.9rem' }}>
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('/');
-            }}
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            HOME
-          </a>
-          <span style={{ color: 'rgba(245, 245, 245, 0.5)' }}>|</span>
-          <a 
-            href="https://github.com/leeeeesiyeon/oss-snapshot" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{ 
-              color: 'rgba(245, 245, 245, 0.8)', 
-              textDecoration: 'none',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-          >
-            GitHub
-          </a>
-        </div>
-      </div>
+      {/* 토스트 알림 */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
